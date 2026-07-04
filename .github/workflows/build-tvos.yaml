@@ -157,6 +157,10 @@ jobs:
             -DPLATFORM_TVOS=ON \
             -DPLATFORM=SIMULATORARM64_TVOS \
             -DLIBROMFS_PREBUILT_GENERATOR="${SRC_DIR}/library/borealis/libromfs-generator" \
+            -DHAVE_H_ERRNO_ASSIGNABLE_EXITCODE=0 \
+            -DHAVE_H_ERRNO_ASSIGNABLE_EXITCODE__TRYRUN_OUTPUT="" \
+            -DHAVE_POLL_FINE_EXITCODE=1 \
+            -DHAVE_POLL_FINE_EXITCODE__TRYRUN_OUTPUT="" \
             -DDEPLOYMENT_TARGET="${DEPLOYMENT_TARGET}" \
             -DCMAKE_BUILD_TYPE="${BUILD_CONFIG}" \
             2>&1 | tee "${LOG_DIR}/05-cmake-configure.log"
