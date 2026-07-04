@@ -1,0 +1,234 @@
+name: Build wiliwili tvOS (simulator)
+
+# 在 GitHub macOS runner 上：clone wiliwili → 应用补丁 → 取 MPVKit →
+# cmake(SIMULATORARM64_TVOS) → xcodebuild → 模拟器冒烟。
+# 免签名、免证书。每个可失败步骤都有 if: always() 的日志/产物兜底上传。
+#
+# 本 workflow 存放于「CI 仓库」（由 scripts/assemble-ci-repo.sh 装配），
+# 该仓库根目录含 patches/0002-wiliwili-tvos.patch。wiliwili 源码由 CI 现场 clone。
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      mpvkit_tag:
+        description: 'MPVKit release tag'
+        required: false
+        default: '0.41.0'
+      run_smoke:
+        description: 'Run simulator smoke test (1) or compile-only (0)'
+        required: false
+        default: '1'
+
+permissions:
+  contents: read
+
+jobs:
+  build-tvos-simulator:
+    # macos-15 为 Apple Silicon(arm64) runner，匹配 SIMULATORARM64_TVOS 与
+    # plist 的 UIRequiredDeviceCapabilities=arm64。
+    runs-on: macos-15
+
+    env:
+      MPVKIT_TAG: ${{ github.event.inputs.mpvkit_tag || '0.41.0' }}
+      RUN_SMOKE: ${{ github.event.inputs.run_smoke || '1' }}
+      WILIWILI_REF: yoga
+      WILIWILI_URL: https://github.com/xfangfang/wiliwili.git
+      DEPLOYMENT_TARGET: '14.0'
+      BUILD_CONFIG: Release
+      DEPS_DIR: ${{ github.workspace }}/deps
+      MPVKIT_DIR: ${{ github.workspace }}/mpvkit
+      LOG_DIR: ${{ github.workspace }}/logs
+      SRC_DIR: ${{ github.workspace }}/wiliwili
+
+    steps:
+      # -------------------------------------------------------------------
+      - name: Checkout CI repo (patches live here)
+        uses: actions/checkout@v4
+
+      - name: Prepare dirs & tools
+        run: |
+          set -euo pipefail
+          mkdir -p "${LOG_DIR}" "${DEPS_DIR}/lib/pkgconfig" "${DEPS_DIR}/include" "${MPVKIT_DIR}"
+          brew list ninja >/dev/null 2>&1 || brew install ninja
+          brew list pkg-config >/dev/null 2>&1 || brew install pkg-config
+          echo "=== toolchain ==="        | tee "${LOG_DIR}/00-env.log"
+          cmake --version                 | tee -a "${LOG_DIR}/00-env.log"
+          xcodebuild -version             | tee -a "${LOG_DIR}/00-env.log"
+          xcodebuild -showsdks | grep -i appletv | tee -a "${LOG_DIR}/00-env.log" || true
+
+      # -------------------------------------------------------------------
+      - name: Clone wiliwili (yoga, recursive)
+        run: |
+          set -euo pipefail
+          git clone --branch "${WILIWILI_REF}" --recursive "${WILIWILI_URL}" "${SRC_DIR}" \
+            2>&1 | tee "${LOG_DIR}/01-clone.log"
+          git -C "${SRC_DIR}" submodule update --init --recursive \
+            2>&1 | tee "${LOG_DIR}/02-submodule.log"
+
+      - name: Apply tvOS patch
+        run: |
+          set -euo pipefail
+          PATCH="${GITHUB_WORKSPACE}/patches/0002-wiliwili-tvos.patch"
+          test -f "${PATCH}" || { echo "patch not found: ${PATCH}"; exit 1; }
+          if git -C "${SRC_DIR}" apply --reverse --check "${PATCH}" >/dev/null 2>&1; then
+            echo "patch already applied" | tee "${LOG_DIR}/03-patch.log"
+          else
+            git -C "${SRC_DIR}" apply --check "${PATCH}" 2>&1 | tee "${LOG_DIR}/03-patch.log"
+            git -C "${SRC_DIR}" apply "${PATCH}"
+            echo "patch applied" | tee -a "${LOG_DIR}/03-patch.log"
+          fi
+
+      # -------------------------------------------------------------------
+      - name: Fetch MPVKit & assemble deps (tvOS-simulator slice)
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/mpvkit/MPVKit/releases/download/${MPVKIT_TAG}"
+          FWS=(Libmpv Libavcodec Libavdevice Libavformat Libavfilter Libavutil Libswresample Libswscale)
+
+          sim_slice_of() {
+            local plist="$1/Info.plist" n i plat variant
+            test -f "${plist}" || return 1
+            n="$(plutil -extract AvailableLibraries raw "${plist}" 2>/dev/null || echo 0)"
+            for ((i=0; i<n; i++)); do
+              plat="$(plutil -extract AvailableLibraries.${i}.SupportedPlatform raw "${plist}" 2>/dev/null || true)"
+              variant="$(plutil -extract AvailableLibraries.${i}.SupportedPlatformVariant raw "${plist}" 2>/dev/null || true)"
+              if [ "${plat}" = "tvos" ] && [ "${variant}" = "simulator" ]; then
+                plutil -extract AvailableLibraries.${i}.LibraryIdentifier raw "${plist}"; return 0
+              fi
+            done
+            return 1
+          }
+
+          for fw in "${FWS[@]}"; do
+            zip="${MPVKIT_DIR}/${fw}.xcframework.zip"
+            echo "downloading ${fw} ..." | tee -a "${LOG_DIR}/04-mpvkit.log"
+            curl -fSL --retry 3 --retry-delay 3 -o "${zip}" "${BASE}/${fw}.xcframework.zip" \
+              2>&1 | tee -a "${LOG_DIR}/04-mpvkit.log"
+            rm -rf "${MPVKIT_DIR}/${fw}.xcframework"
+            unzip -q -o "${zip}" -d "${MPVKIT_DIR}"
+            xcf="${MPVKIT_DIR}/${fw}.xcframework"
+            slice="$(sim_slice_of "${xcf}")" || {
+              echo "ERROR: ${fw} has no tvOS-simulator slice (tag=${MPVKIT_TAG}). See docs/WP4-mpvkit-integration.md §5." \
+                | tee -a "${LOG_DIR}/04-mpvkit.log"; exit 1; }
+            echo "${fw}: simulator slice = ${slice}" | tee -a "${LOG_DIR}/04-mpvkit.log"
+            sdir="${xcf}/${slice}"
+            a="$(find "${sdir}" -maxdepth 3 -name '*.a' | head -n1 || true)"
+            if [ -z "${a}" ]; then
+              a="$(find "${sdir}" -maxdepth 3 -type f \( -name "${fw#Lib}" -o -name "${fw}" \) | head -n1 || true)"
+            fi
+            test -n "${a}" || { echo "ERROR: no static lib in ${fw} slice"; exit 1; }
+            lower="$(echo "${fw}" | tr '[:upper:]' '[:lower:]')"
+            cp "${a}" "${DEPS_DIR}/lib/${lower}.a"
+            hdr="$(find "${sdir}" -maxdepth 3 -type d -name Headers | head -n1 || true)"
+            [ -n "${hdr}" ] && cp -R "${hdr}/." "${DEPS_DIR}/include/" 2>/dev/null || true
+          done
+
+          # 用 sed 去掉 YAML 块缩进，避免把前导空格写进 .pc（strict pkg-config 会报错）
+          sed 's/^          //' > "${DEPS_DIR}/lib/pkgconfig/mpv.pc" <<EOF
+          prefix=${DEPS_DIR}
+          libdir=\${prefix}/lib
+          includedir=\${prefix}/include
+          Name: mpv
+          Version: ${MPVKIT_TAG}
+          Description: mpv media player (tvOS simulator, from MPVKit)
+          Libs: -L\${libdir} -lmpv
+          Libs.private: -lavcodec -lavformat -lavutil -lavfilter -lavdevice -lswresample -lswscale -framework AVFoundation -framework CoreAudio -framework AudioToolbox -framework CoreVideo -framework CoreMedia -framework VideoToolbox -framework Metal -framework CoreText -framework CoreFoundation -lc++ -lz -liconv -lbz2 -lexpat -lresolv -lxml2
+          Cflags: -I\${includedir}
+          EOF
+          echo "--- mpv.pc ---" | tee -a "${LOG_DIR}/04-mpvkit.log"
+          cat "${DEPS_DIR}/lib/pkgconfig/mpv.pc" | tee -a "${LOG_DIR}/04-mpvkit.log"
+          echo "NOTE: libmpv transitively needs 3rd-party static libs (openssl/gnutls/libass/dav1d/placebo/MoltenVK...). If the link step reports undefined symbols, add those xcframeworks per docs/WP4-mpvkit-integration.md §1.2." \
+            | tee -a "${LOG_DIR}/04-mpvkit.log"
+
+      # -------------------------------------------------------------------
+      - name: CMake configure (SIMULATORARM64_TVOS)
+        run: |
+          set -euo pipefail
+          export PKG_CONFIG_LIBDIR="${DEPS_DIR}/lib/pkgconfig"
+          pkg-config --exists mpv || { echo "pkg-config cannot find mpv"; exit 1; }
+          cmake -B "${SRC_DIR}/build-tvsim" -S "${SRC_DIR}" -G Xcode \
+            -DPLATFORM_TVOS=ON \
+            -DPLATFORM=SIMULATORARM64_TVOS \
+            -DDEPLOYMENT_TARGET="${DEPLOYMENT_TARGET}" \
+            -DCMAKE_BUILD_TYPE="${BUILD_CONFIG}" \
+            2>&1 | tee "${LOG_DIR}/05-cmake-configure.log"
+
+      - name: CMake build (no code signing)
+        run: |
+          set -euo pipefail
+          cmake --build "${SRC_DIR}/build-tvsim" --config "${BUILD_CONFIG}" -- \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            2>&1 | tee "${LOG_DIR}/06-cmake-build.log"
+
+      - name: Locate .app
+        id: locate
+        run: |
+          set -euo pipefail
+          APP="$(find "${SRC_DIR}/build-tvsim" -maxdepth 5 -type d -name 'wiliwili.app' | head -n1 || true)"
+          test -n "${APP}" || { echo "wiliwili.app not found"; exit 1; }
+          echo "app_path=${APP}" >> "${GITHUB_OUTPUT}"
+          echo "found: ${APP}" | tee "${LOG_DIR}/07-locate.log"
+
+      # -------------------------------------------------------------------
+      - name: Simulator smoke test
+        if: ${{ github.event.inputs.run_smoke != '0' }}
+        run: |
+          set -euo pipefail
+          APP="${{ steps.locate.outputs.app_path }}"
+
+          DEVTYPE="com.apple.CoreSimulator.SimDeviceType.Apple-TV-4K-3rd-generation-4K"
+          if ! xcrun simctl list devicetypes | grep -q "${DEVTYPE}"; then
+            DEVTYPE="$(xcrun simctl list devicetypes | grep -i 'Apple TV' \
+              | grep -oE 'com\.apple\.CoreSimulator\.SimDeviceType\.[A-Za-z0-9._-]+' | head -n1)"
+          fi
+          test -n "${DEVTYPE}" || { echo "no Apple TV device type"; exit 1; }
+          RUNTIME="$(xcrun simctl list runtimes | grep -i 'tvOS' \
+            | grep -oE 'com\.apple\.CoreSimulator\.SimRuntime\.tvOS[-0-9]+' | head -n1)"
+          test -n "${RUNTIME}" || { echo "no tvOS runtime installed"; exit 1; }
+          echo "devtype=${DEVTYPE} runtime=${RUNTIME}" | tee "${LOG_DIR}/08-simctl.log"
+
+          UDID="$(xcrun simctl create wiliwili-tvos-smoke "${DEVTYPE}" "${RUNTIME}")"
+          echo "udid=${UDID}" | tee -a "${LOG_DIR}/08-simctl.log"
+
+          xcrun simctl boot "${UDID}" 2>&1 | tee -a "${LOG_DIR}/08-simctl.log" || true
+          xcrun simctl bootstatus "${UDID}" -b 2>&1 | tee -a "${LOG_DIR}/08-simctl.log" || true
+
+          xcrun simctl install "${UDID}" "${APP}" 2>&1 | tee -a "${LOG_DIR}/08-simctl.log"
+
+          BUNDLE_ID="$(plutil -extract CFBundleIdentifier raw "${APP}/Info.plist")"
+          echo "bundle_id=${BUNDLE_ID}" | tee -a "${LOG_DIR}/08-simctl.log"
+
+          OUT="$(xcrun simctl launch "${UDID}" "${BUNDLE_ID}" 2>&1 | tee -a "${LOG_DIR}/08-simctl.log" || true)"
+          echo "launch: ${OUT}"
+
+          sleep 15
+          xcrun simctl io "${UDID}" screenshot "${LOG_DIR}/smoke-screenshot.png" \
+            2>&1 | tee -a "${LOG_DIR}/08-simctl.log" || true
+          xcrun simctl spawn "${UDID}" log show --last 2m --predicate "process == 'wiliwili'" \
+            > "${LOG_DIR}/09-app-syslog.log" 2>&1 || true
+
+          ALIVE=0
+          if xcrun simctl spawn "${UDID}" launchctl list 2>/dev/null | grep -q "${BUNDLE_ID}"; then ALIVE=1; fi
+          if [ "${ALIVE}" != "1" ] && xcrun simctl spawn "${UDID}" ps -ax 2>/dev/null | grep -q "wiliwili.app/wiliwili"; then ALIVE=1; fi
+
+          xcrun simctl shutdown "${UDID}" >/dev/null 2>&1 || true
+          test "${ALIVE}" = "1" || { echo "SMOKE FAIL: process not alive"; exit 1; }
+          echo "SMOKE PASS" | tee -a "${LOG_DIR}/08-simctl.log"
+
+      # -------------------------------------------------------------------
+      - name: Upload .app artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wiliwili-tvos-simulator-app
+          path: ${{ steps.locate.outputs.app_path }}
+          if-no-files-found: warn
+
+      - name: Upload logs & screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wiliwili-tvos-logs
+          path: ${{ env.LOG_DIR }}
+          if-no-files-found: warn
