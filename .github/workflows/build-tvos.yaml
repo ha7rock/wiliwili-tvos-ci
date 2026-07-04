@@ -79,6 +79,12 @@ jobs:
             echo "patch applied" | tee -a "${LOG_DIR}/03-patch.log"
           fi
 
+      - name: Build libromfs-generator (host tool, required by USE_LIBROMFS)
+        run: |
+          set -euo pipefail
+          cd "${SRC_DIR}/library/borealis"
+          bash ./build_libromfs_generator.sh 2>&1 | tee "${LOG_DIR}/02b-libromfs.log"
+
       # -------------------------------------------------------------------
       - name: Fetch MPVKit & assemble deps (tvOS-simulator slice)
         run: |
