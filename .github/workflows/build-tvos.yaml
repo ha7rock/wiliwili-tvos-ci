@@ -156,6 +156,7 @@ jobs:
           cmake -B "${SRC_DIR}/build-tvsim" -S "${SRC_DIR}" -G Xcode \
             -DPLATFORM_TVOS=ON \
             -DPLATFORM=SIMULATORARM64_TVOS \
+            -DLIBROMFS_PREBUILT_GENERATOR="${SRC_DIR}/library/borealis/libromfs-generator" \
             -DDEPLOYMENT_TARGET="${DEPLOYMENT_TARGET}" \
             -DCMAKE_BUILD_TYPE="${BUILD_CONFIG}" \
             2>&1 | tee "${LOG_DIR}/05-cmake-configure.log"
