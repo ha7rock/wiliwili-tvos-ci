@@ -1,0 +1,290 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 19feec3..a062e8f 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -143,7 +143,7 @@ else ()
+     list(APPEND APP_PLATFORM_INCLUDE ${MPV_INCLUDE_DIRS})
+     list(APPEND APP_PLATFORM_LIB ${MPV_STATIC_LIBRARIES})
+     link_directories(${MPV_LIBRARY_DIRS})
+-    if (PLATFORM_IOS)
++    if (PLATFORM_IOS OR PLATFORM_TVOS)
+         list(APPEND APP_PLATFORM_LIB "-framework CoreMedia -framework CoreText -framework VideoToolbox")
+     endif ()
+ 
+@@ -249,13 +249,21 @@ if (PLATFORM_DESKTOP)
+                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/linux/${PACKAGE_NAME}.desktop")
+     endif ()
+ elseif (PLATFORM_IOS)
++    # ios_bundle() 定义为 5 参 (storyboard assets plist name version)，此处按 iOS 分支传参
+     ios_bundle(
+-            "${CMAKE_CURRENT_SOURCE_DIR}/library/borealis/demo/ios/tvos/Splash.storyboard"
+             "${CMAKE_CURRENT_SOURCE_DIR}/library/borealis/demo/ios/iphoneos/Splash.storyboard"
+             "${CMAKE_CURRENT_SOURCE_DIR}/library/borealis/demo/ios/Images.xcassets"
+             "${CMAKE_CURRENT_SOURCE_DIR}/scripts/ios/iOSBundleInfo.plist.in"
+             "wiliwili"
+             "${APP_VERSION}")
++elseif (PLATFORM_TVOS)
++    # tvOS 分支：使用 tvos 版 Splash.storyboard 与 tvOS 专用 Info.plist
++    ios_bundle(
++            "${CMAKE_CURRENT_SOURCE_DIR}/library/borealis/demo/ios/tvos/Splash.storyboard"
++            "${CMAKE_CURRENT_SOURCE_DIR}/library/borealis/demo/ios/Images.xcassets"
++            "${CMAKE_CURRENT_SOURCE_DIR}/scripts/ios/tvOSBundleInfo.plist.in"
++            "wiliwili"
++            "${APP_VERSION}")
+ elseif (PLATFORM_PSV)
+     set(PSV_ASSETS_FILES
+         ${CMAKE_SOURCE_DIR}/scripts/psv/sce_sys/icon0.png sce_sys/icon0.png
+diff --git a/library/CMakeLists.txt b/library/CMakeLists.txt
+index 8967d4a..8018650 100644
+--- a/library/CMakeLists.txt
++++ b/library/CMakeLists.txt
+@@ -19,7 +19,7 @@ else ()
+         if (WIN32)
+             set(CPR_FORCE_WINSSL_BACKEND ON)
+         endif ()
+-    elseif (PLATFORM_IOS)
++    elseif (PLATFORM_IOS OR PLATFORM_TVOS)
+         set(CPR_USE_SYSTEM_CURL OFF)
+         set(CPR_SKIP_CA_BUNDLE_SEARCH ON)
+     elseif (PLATFORM_SWITCH OR PLATFORM_PS4 OR PLATFORM_PSV)
+@@ -34,7 +34,7 @@ if (PLATFORM_PS4)
+ endif ()
+ 
+ # add libopencc
+-if (NOT USE_LIBROMFS AND NOT DISABLE_OPENCC AND NOT PLATFORM_IOS)
++if (NOT USE_LIBROMFS AND NOT DISABLE_OPENCC AND NOT PLATFORM_IOS AND NOT PLATFORM_TVOS)
+     set(BRLS_USE_OPENCC ON)
+     if (USE_SYSTEM_OPENCC)
+         find_package(PkgConfig REQUIRED)
+diff --git a/scripts/ios/tvOSBundleInfo.plist.in b/scripts/ios/tvOSBundleInfo.plist.in
+new file mode 100644
+index 0000000..8f75a8c
+--- /dev/null
++++ b/scripts/ios/tvOSBundleInfo.plist.in
+@@ -0,0 +1,58 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
++<plist version="1.0">
++<dict>
++	<key>CFBundleDevelopmentRegion</key>
++	<string>English</string>
++	<key>CFBundleExecutable</key>
++	<string>${MACOSX_BUNDLE_EXECUTABLE_NAME}</string>
++	<key>CFBundleGetInfoString</key>
++	<string>${MACOSX_BUNDLE_INFO_STRING}</string>
++	<key>CFBundleIdentifier</key>
++	<string>${MACOSX_BUNDLE_GUI_IDENTIFIER}</string>
++	<key>CFBundleInfoDictionaryVersion</key>
++	<string>6.0</string>
++	<key>CFBundleName</key>
++	<string>${MACOSX_BUNDLE_BUNDLE_NAME}</string>
++	<key>CFBundlePackageType</key>
++	<string>APPL</string>
++	<key>CFBundleShortVersionString</key>
++	<string>${MACOSX_BUNDLE_SHORT_VERSION_STRING}</string>
++	<key>CFBundleSignature</key>
++	<string>????</string>
++	<key>CFBundleVersion</key>
++	<string>${MACOSX_BUNDLE_BUNDLE_VERSION}</string>
++	<key>CSResourcesFileMapped</key>
++	<true/>
++	<key>NSHumanReadableCopyright</key>
++	<string>${MACOSX_BUNDLE_COPYRIGHT}</string>
++	<key>UILaunchStoryboardName</key>
++	<string>Splash</string>
++	<!-- tvOS 要求：设备族 3 = Apple TV -->
++	<key>UIDeviceFamily</key>
++	<array>
++		<integer>3</integer>
++	</array>
++	<key>UIRequiredDeviceCapabilities</key>
++	<array>
++		<string>arm64</string>
++	</array>
++	<!-- 支持间接输入事件（Siri Remote / MFi 手柄经 GameController 框架） -->
++	<key>UIApplicationSupportsIndirectInputEvents</key>
++	<true/>
++	<!-- tvOS 分层图标（Brand Assets）：需在 Xcode 侧 Asset Catalog 制作后启用。
++	     占位说明见 patches/README.md 与 docs/BUILD-tvos.md（P4）。
++	<key>CFBundleIcons</key>
++	<dict>
++		<key>CFBundlePrimaryIcon</key>
++		<string>App Icon</string>
++	</dict>
++	-->
++	<key>NSBluetoothPeripheralUsageDescription</key>
++	<string>MyApp would like to remain connected to nearby bluetooth Game Controllers and Game Pads even when you're not using the app.</string>
++	<key>NSBluetoothAlwaysUsageDescription</key>
++	<string>MyApp would like to remain connected to nearby bluetooth Game Controllers and Game Pads even when you're not using the app.</string>
++	<key>com.apple.developer.networking.multicast</key>
++	<true/>
++</dict>
++</plist>
+diff --git a/wiliwili/source/activity/setting_activity.cpp b/wiliwili/source/activity/setting_activity.cpp
+index 171381b..2c7185a 100644
+--- a/wiliwili/source/activity/setting_activity.cpp
++++ b/wiliwili/source/activity/setting_activity.cpp
+@@ -280,7 +280,7 @@ void SettingActivity::onContentAvailable() {
+         mpv.getString("ffmpeg-version"), mpv.getString("mpv-version")));
+ 
+     /// Quit APP
+-#ifdef IOS
++#if defined(IOS) || defined(TVOS)
+     btnQuit->setVisibility(brls::Visibility::GONE);
+ #else
+     btnQuit->registerClickAction([](...) -> bool {
+@@ -594,7 +594,7 @@ void SettingActivity::onContentAvailable() {
+     }
+ 
+     /// Opencc
+-#if defined(IOS) || defined(DISABLE_OPENCC)
++#if defined(IOS) || defined(TVOS) || defined(DISABLE_OPENCC)
+     btnOpencc->setVisibility(brls::Visibility::GONE);
+ #else
+     if (brls::Application::getLocale() == brls::LOCALE_ZH_HANT ||
+diff --git a/wiliwili/source/main.cpp b/wiliwili/source/main.cpp
+index 06f6e54..f231e06 100644
+--- a/wiliwili/source/main.cpp
++++ b/wiliwili/source/main.cpp
+@@ -15,7 +15,7 @@
+ #include "utils/activity_helper.hpp"
+ #include "view/mpv_core.hpp"
+ 
+-#ifdef IOS
++#if defined(IOS) || defined(TVOS)
+ #include <SDL2/SDL_main.h>
+ #endif
+ 
+diff --git a/wiliwili/source/utils/config_helper.cpp b/wiliwili/source/utils/config_helper.cpp
+index 3ff65de..0a7cb4a 100644
+--- a/wiliwili/source/utils/config_helper.cpp
++++ b/wiliwili/source/utils/config_helper.cpp
+@@ -2,7 +2,7 @@
+ // Created by fang on 2022/7/10.
+ //
+ 
+-#ifdef IOS
++#if defined(IOS) || defined(TVOS)
+ #include <CoreFoundation/CoreFoundation.h>
+ #elif defined(__APPLE__) || defined(__linux__) || defined(_WIN32)
+ #include <unistd.h>
+@@ -172,7 +172,7 @@ std::unordered_map<SettingItem, ProgramOption> ProgramConfig::SETTING_MAP = {
+     /// bool
+     {SettingItem::APP_SWAP_ABXY, {"app_swap_abxy", {}, {}, 0}},
+     {SettingItem::GAMEPAD_VIBRATION, {"gamepad_vibration", {}, {}, 1}},
+-#if defined(IOS) || defined(__PSV__)
++#if defined(IOS) || defined(TVOS) || defined(__PSV__)
+     {SettingItem::HIDE_BOTTOM_BAR, {"hide_bottom_bar", {}, {}, 1}},
+ #else
+     {SettingItem::HIDE_BOTTOM_BAR, {"hide_bottom_bar", {}, {}, 0}},
+@@ -192,7 +192,7 @@ std::unordered_map<SettingItem, ProgramOption> ProgramConfig::SETTING_MAP = {
+     {SettingItem::PLAYER_HIGHLIGHT_BAR, {"player_highlight_bar", {}, {}, 0}},
+     {SettingItem::PLAYER_SKIP_OPENING_CREDITS, {"player_skip_opening_credits", {}, {}, 1}},
+     {SettingItem::PLAYER_LOW_QUALITY, {"player_low_quality", {}, {}, 1}},
+-#if defined(IOS) || defined(__PSV__) || defined(__SWITCH__)
++#if defined(IOS) || defined(TVOS) || defined(__PSV__) || defined(__SWITCH__)
+     {SettingItem::PLAYER_HWDEC, {"player_hwdec", {}, {}, 1}},
+ #else
+     {SettingItem::PLAYER_HWDEC, {"player_hwdec", {}, {}, 0}},
+@@ -515,7 +515,7 @@ void ProgramConfig::load() {
+     }
+ 
+     // 初始化自定义手柄按键映射
+-#ifdef IOS
++#if defined(IOS) || defined(TVOS)
+ #elif defined(__APPLE__) || defined(__linux__) || defined(_WIN32)
+     brls::DesktopPlatform::GAMEPAD_DB = getConfigDir() + "/gamecontrollerdb.txt";
+ #endif
+@@ -691,7 +691,7 @@ void ProgramConfig::load() {
+         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_ZH_HANS;
+ #endif
+     }
+-#ifdef IOS
++#if defined(IOS) || defined(TVOS)
+ #elif defined(__APPLE__) || defined(__linux__) || defined(_WIN32)
+     // 初始化上一次窗口位置
+     loadHomeWindowState();
+@@ -790,7 +790,7 @@ void ProgramConfig::load() {
+         MPVCore::VIDEO_VOLUME = getSettingItem(SettingItem::PLAYER_VOLUME, 100);
+ 
+         // 设置窗口最小尺寸
+-#ifdef IOS
++#if defined(IOS) || defined(TVOS)
+ #elif defined(__APPLE__) || defined(__linux__) || defined(_WIN32)
+         int minWidth  = getIntOption(SettingItem::MINIMUM_WINDOW_WIDTH);
+         int minHeight = getIntOption(SettingItem::MINIMUM_WINDOW_HEIGHT);
+@@ -821,7 +821,7 @@ void ProgramConfig::load() {
+         });
+     });
+ 
+-#ifdef IOS
++#if defined(IOS) || defined(TVOS)
+ #elif defined(__APPLE__) || defined(__linux__) || defined(_WIN32)
+     // 窗口将要关闭时, 保存窗口状态配置
+     brls::Application::getExitEvent()->subscribe([this]() { saveHomeWindowState(); });
+@@ -1135,7 +1135,7 @@ std::string ProgramConfig::getConfigDir() {
+     return "/data/wiliwili";
+ #elif defined(__PSV__)
+     return "ux0:/data/wiliwili";
+-#elif defined(IOS)
++#elif defined(IOS) || defined(TVOS)
+     CFURLRef homeURL = CFCopyHomeDirectoryURL();
+     if (homeURL != nullptr) {
+         char buffer[PATH_MAX];
+@@ -1183,7 +1183,7 @@ void ProgramConfig::exit(char* argv[]) {
+ #ifdef _WIN32
+     WSACleanup();
+ #endif
+-#ifdef IOS
++#if defined(IOS) || defined(TVOS)
+ #elif defined(PS4)
+ #elif __PSV__
+ #elif defined(__APPLE__) || defined(__linux__) || defined(_WIN32)
+diff --git a/wiliwili/source/utils/dialog_helper.cpp b/wiliwili/source/utils/dialog_helper.cpp
+index bac6ee9..327a7bb 100644
+--- a/wiliwili/source/utils/dialog_helper.cpp
++++ b/wiliwili/source/utils/dialog_helper.cpp
+@@ -34,7 +34,7 @@ bool DialogHelper::checkLogin() {
+ void DialogHelper::quitApp(bool restart) {
+     auto dialog = new brls::Dialog("wiliwili/setting/quit_hint"_i18n);
+     dialog->addButton("hints/ok"_i18n, [restart]() {
+-#ifndef IOS
++#if !defined(IOS) && !defined(TVOS)
+         brls::Box* container = new brls::Box();
+         container->setJustifyContent(brls::JustifyContent::CENTER);
+         container->setAlignItems(brls::AlignItems::CENTER);
+@@ -48,7 +48,7 @@ void DialogHelper::quitApp(bool restart) {
+         brls::Application::pushActivity(new brls::Activity(container), brls::TransitionAnimation::NONE);
+         brls::Application::getPlatform()->exitToHomeMode(!restart);
+         brls::Application::quit();
+-#endif /* IOS */
++#endif /* IOS || TVOS */
+     });
+     dialog->setCancelable(false);
+     dialog->open();
+diff --git a/wiliwili/source/utils/version_helper.cpp b/wiliwili/source/utils/version_helper.cpp
+index df1ad61..b8a9fef 100644
+--- a/wiliwili/source/utils/version_helper.cpp
++++ b/wiliwili/source/utils/version_helper.cpp
+@@ -33,7 +33,7 @@ APPVersion::APPVersion() {
+ std::string APPVersion::getVersionStr() { return fmt::format("{}.{}.{}", major, minor, revision); }
+ 
+ std::string APPVersion::getPlatform() {
+-#ifdef IOS
++#if defined(IOS) || defined(TVOS)
+     return "iOS";
+ #elif defined(__APPLE__)
+     return "macOS";
+diff --git a/wiliwili/source/view/mpv_core.cpp b/wiliwili/source/view/mpv_core.cpp
+index 64c96d6..32d6017 100644
+--- a/wiliwili/source/view/mpv_core.cpp
++++ b/wiliwili/source/view/mpv_core.cpp
+@@ -595,7 +595,7 @@ void MPVCore::uninitializeVideo() {
+ void MPVCore::initializeVideo() {
+ #if defined(BOREALIS_USE_OPENGL) && !defined(MPV_SW_RENDER)
+     // Get default framebuffer
+-#if defined(IOS)
++#if defined(IOS) || defined(TVOS)
+     // SDL: OpenGL ES on iOS doesn't use the traditional system-framebuffer setup provided in other operating systems.
+     default_framebuffer = 1;
+ #else
