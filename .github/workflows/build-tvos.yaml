@@ -21,7 +21,7 @@ on:
         default: '1'
 
 permissions:
-  contents: read
+  contents: write  # 允许失败时把错误摘要提交回仓库，供无浏览器环境诊断
 
 jobs:
   build-tvos-simulator:
@@ -172,6 +172,8 @@ jobs:
             -DHAVE_H_ERRNO_ASSIGNABLE_EXITCODE__TRYRUN_OUTPUT="" \
             -DHAVE_POLL_FINE_EXITCODE=1 \
             -DHAVE_POLL_FINE_EXITCODE__TRYRUN_OUTPUT="" \
+            -DCURL_USE_LIBPSL=OFF \
+            -DCURL_USE_LIBSSH2=OFF \
             -DDEPLOYMENT_TARGET="${DEPLOYMENT_TARGET}" \
             -DCMAKE_BUILD_TYPE="${BUILD_CONFIG}" \
             2>&1 | tee "${LOG_DIR}/05-cmake-configure.log"
@@ -254,3 +256,33 @@ jobs:
           name: wiliwili-tvos-logs
           path: ${{ env.LOG_DIR }}
           if-no-files-found: warn
+
+      # 失败时把错误摘要提交回仓库（[skip ci] 防止触发新构建），
+      # 使诊断可以通过公开 raw 内容完成，不依赖登录态浏览器。
+      - name: Publish failure excerpt to repo
+        if: failure()
+        run: |
+          set -uo pipefail
+          EX="/tmp/failure-excerpt.txt"
+          {
+            echo "run=${GITHUB_RUN_NUMBER} sha=${GITHUB_SHA} date=$(date -u +%FT%TZ)"
+            for f in "${LOG_DIR}"/*.log; do
+              if grep -qE "error:|Undefined symbol|ld: error|fatal error|FAILED" "$f" 2>/dev/null; then
+                echo "===== ${f##*/} (error context) ====="
+                grep -nE -B2 -A8 "error:|Undefined symbol|ld: error|fatal error" "$f" | head -n 400
+              fi
+            done
+            echo "===== tail 06-cmake-build.log ====="
+            tail -n 150 "${LOG_DIR}/06-cmake-build.log" 2>/dev/null || true
+            echo "===== tail 05-cmake-configure.log ====="
+            tail -n 60 "${LOG_DIR}/05-cmake-configure.log" 2>/dev/null || true
+          } > "$EX" || true
+          cd "${GITHUB_WORKSPACE}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main || true
+          mkdir -p ci-logs
+          cp "$EX" ci-logs/last-failure.txt
+          git add ci-logs/last-failure.txt
+          git commit -m "ci: failure excerpt run ${GITHUB_RUN_NUMBER} [skip ci]" || true
+          git push origin HEAD:main || true
