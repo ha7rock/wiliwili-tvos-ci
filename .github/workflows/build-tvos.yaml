@@ -152,8 +152,13 @@ jobs:
           xcf="$(find "${MPVKIT_DIR}" -maxdepth 1 -iname 'gmp.xcframework' | head -n1)"
           slice="$(sim_slice_of "${xcf}")" || { echo "ERROR: gmp has no tvOS-simulator slice"; exit 1; }
           echo "gmp: simulator slice = ${slice}" | tee -a "${LOG_DIR}/04-mpvkit.log"
-          a="$(find "${xcf}/${slice}" -maxdepth 3 -name '*.a' | head -n1 || true)"
-          test -n "${a}" || { echo "ERROR: no static lib in gmp slice"; exit 1; }
+          # run#9：gmp 切片内无 *.a——xcframework 为 framework 布局（gmp.framework/gmp 无扩展名二进制），
+          # 与主循环 FWS 的 fallback 同法：按文件名 gmp 兜底查找
+          a="$(find "${xcf}/${slice}" -maxdepth 4 -name '*.a' | head -n1 || true)"
+          if [ -z "${a}" ]; then
+            a="$(find "${xcf}/${slice}" -maxdepth 4 -type f -name 'gmp' | head -n1 || true)"
+          fi
+          test -n "${a}" || { echo "ERROR: no static lib in gmp slice"; find "${xcf}/${slice}" -maxdepth 4 | head -n 30; exit 1; }
           cp "${a}" "${DEPS_DIR}/lib/libgmp.a"
 
           # 用 sed 去掉 YAML 块缩进，避免把前导空格写进 .pc（strict pkg-config 会报错）
@@ -189,6 +194,7 @@ jobs:
             -DHAVE_POLL_FINE_EXITCODE__TRYRUN_OUTPUT="" \
             -DCURL_USE_LIBPSL=OFF \
             -DCURL_USE_LIBSSH2=OFF \
+            -DCMAKE_EXE_LINKER_FLAGS="-L${DEPS_DIR}/lib -lgmp -lxml2" \
             -DDEPLOYMENT_TARGET="${DEPLOYMENT_TARGET}" \
             -DCMAKE_BUILD_TYPE="${BUILD_CONFIG}" \
             2>&1 | tee "${LOG_DIR}/05-cmake-configure.log"
