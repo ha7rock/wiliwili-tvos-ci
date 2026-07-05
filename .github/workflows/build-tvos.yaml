@@ -141,6 +141,21 @@ jobs:
             fi
           done
 
+          # gmp：gnutls 的传递依赖，未并入 libmpv.a（run#8 链接错 ___gmpz_*）。
+          # 资产在 mpvkit/gnutls-build（非 MPVKit release），URL 实抓自 0.41.0 Package.swift。
+          GMP_URL="https://github.com/mpvkit/gnutls-build/releases/download/3.8.11/gmp.xcframework.zip"
+          zip="${MPVKIT_DIR}/gmp.xcframework.zip"
+          echo "downloading gmp ..." | tee -a "${LOG_DIR}/04-mpvkit.log"
+          curl -fSL --retry 3 --retry-delay 3 -o "${zip}" "${GMP_URL}" 2>&1 | tee -a "${LOG_DIR}/04-mpvkit.log"
+          rm -rf "${MPVKIT_DIR}/gmp.xcframework"
+          unzip -q -o "${zip}" -d "${MPVKIT_DIR}"
+          xcf="$(find "${MPVKIT_DIR}" -maxdepth 1 -iname 'gmp.xcframework' | head -n1)"
+          slice="$(sim_slice_of "${xcf}")" || { echo "ERROR: gmp has no tvOS-simulator slice"; exit 1; }
+          echo "gmp: simulator slice = ${slice}" | tee -a "${LOG_DIR}/04-mpvkit.log"
+          a="$(find "${xcf}/${slice}" -maxdepth 3 -name '*.a' | head -n1 || true)"
+          test -n "${a}" || { echo "ERROR: no static lib in gmp slice"; exit 1; }
+          cp "${a}" "${DEPS_DIR}/lib/libgmp.a"
+
           # 用 sed 去掉 YAML 块缩进，避免把前导空格写进 .pc（strict pkg-config 会报错）
           sed 's/^          //' > "${DEPS_DIR}/lib/pkgconfig/mpv.pc" <<EOF
           prefix=${DEPS_DIR}
@@ -150,7 +165,7 @@ jobs:
           Version: ${MPVKIT_TAG}
           Description: mpv media player (tvOS simulator, from MPVKit)
           Libs: -L\${libdir} -lmpv
-          Libs.private: -lavcodec -lavformat -lavutil -lavfilter -lavdevice -lswresample -lswscale -framework AVFoundation -framework CoreAudio -framework AudioToolbox -framework CoreVideo -framework CoreMedia -framework VideoToolbox -framework Metal -framework CoreText -framework CoreFoundation -lc++ -lz -liconv -lbz2 -lexpat -lresolv -lxml2
+          Libs.private: -lavcodec -lavformat -lavutil -lavfilter -lavdevice -lswresample -lswscale -lgmp -lxml2 -lbz2 -lexpat -lresolv -lc++ -framework AVFoundation -framework CoreAudio -framework AudioToolbox -framework CoreVideo -framework CoreMedia -framework VideoToolbox -framework Metal -framework CoreText -framework CoreFoundation -lc++ -lz -liconv -lbz2 -lexpat -lresolv -lxml2
           Cflags: -I\${includedir}
           EOF
           echo "--- mpv.pc ---" | tee -a "${LOG_DIR}/04-mpvkit.log"
