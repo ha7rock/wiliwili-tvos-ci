@@ -1,38 +1,29 @@
-run=8 sha=c4294936b00c54d267c13a350182c4009773a1f4 date=2026-07-05T14:47:15Z
+run=7 sha=6a53a693743d4037e5004438fda70119630cc982 date=2026-07-05T14:49:12Z
 ===== 06-cmake-build.log (error context) =====
-9403-    /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -Xlinker -reproducible -target arm64-apple-tvos14.0-simulator -isysroot /Applications/Xcode_16.4.app/Contents/Developer/Platforms/AppleTVSimulator.platform/Developer/SDKs/AppleTVSimulator18.5.sdk -O3 -L/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/build/EagerLinkingTBDs/Release-appletvsimulator -L/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/Release-appletvsimulator -L/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/deps/lib/Release-appletvsimulator -L/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/deps/lib -F/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/build/EagerLinkingTBDs/Release-appletvsimulator -F/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/Release-appletvsimulator -filelist /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/build/wiliwili.build/Release-appletvsimulator/Objects-normal/arm64/wiliwili.LinkFileList -Xlinker -rpath -Xlinker /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/deps/lib -dead_strip -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/build/wiliwili.build/Release-appletvsimulator/Objects-normal/arm64/wiliwili_dependency_info.dat -stdlib\=libc++ -Wl,-search_paths_first -Wl,-headerpad_max_install_names /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/Release-appletvsimulator/libborealis.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/lib/Release/liblunasvg.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/Release-appletvsimulator/libpystring.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/Release-appletvsimulator/libpdr.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/mongoose/Release-appletvsimulator/libmongoose.a -lz -lmpv -lavcodec -lavformat -lavutil -lavfilter -lavdevice -lswresample -lswscale -framework CoreMedia -framework CoreText -framework VideoToolbox /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/cpr/cpr/Release-appletvsimulator/libcpr.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/_deps/curl-build/lib/Release-appletvsimulator/libcurl.a -framework Security -framework CoreFoundation -framework CoreServices /Applications/Xcode_16.4.app/Contents/Developer/Platforms/AppleTVSimulator.platform/Developer/SDKs/AppleTVSimulator18.5.sdk/usr/lib/libz.tbd /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/Release-appletvsimulator/libqrcode.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/lib/extern/fmt/Release-appletvsimulator/libfmt.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/lib/extern/yoga/yoga/Release-appletvsimulator/libyogacore.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/lib/extern/libromfs/lib/Release-appletvsimulator/libromfs-wiliwili.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/lib/extern/SDL/Release-appletvsimulator/libSDL2.a -lm -liconv -Wl,-framework,CoreVideo -Wl,-framework,CoreAudio -Wl,-framework,AudioToolbox -Wl,-framework,AVFoundation -Wl,-framework,CoreBluetooth -Wl,-framework,CoreGraphics -Wl,-framework,Foundation -Wl,-weak_framework,GameController -Wl,-framework,Metal -Wl,-framework,OpenGLES -Wl,-framework,QuartzCore -Wl,-framework,UIKit -Wl,-weak_framework,CoreHaptics -lpthread /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/lib/extern/SDL/Release-appletvsimulator/libSDL2main.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/Release-appletvsimulator/libtinyxml2.a -o /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/Release-appletvsimulator/wiliwili.app/wiliwili
-9404-ld: warning: search path '/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/deps/lib/Release-appletvsimulator' not found
-9405:Undefined symbols for architecture arm64:
-9406-  "___gmpz_add_ui", referenced from:
-9407-      _ff_dh_generate_public_key in libavformat.a[arm64][133](rtmpdh.o)
-9408-  "___gmpz_clear", referenced from:
-9409-      _ff_dh_free in libavformat.a[arm64][133](rtmpdh.o)
-9410-      _ff_dh_free in libavformat.a[arm64][133](rtmpdh.o)
-9411-      _ff_dh_free in libavformat.a[arm64][133](rtmpdh.o)
-9412-      _ff_dh_free in libavformat.a[arm64][133](rtmpdh.o)
-9413-      _ff_dh_generate_public_key in libavformat.a[arm64][133](rtmpdh.o)
+9389-    /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -Xlinker -reproducible -target arm64-apple-tvos14.0-simulator -isysroot /Applications/Xcode_16.4.app/Contents/Developer/Platforms/AppleTVSimulator.platform/Developer/SDKs/AppleTVSimulator18.5.sdk -O3 -L/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/build/EagerLinkingTBDs/Release-appletvsimulator -L/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/Release-appletvsimulator -L/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/deps/lib/Release-appletvsimulator -L/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/deps/lib -F/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/build/EagerLinkingTBDs/Release-appletvsimulator -F/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/Release-appletvsimulator -filelist /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/build/wiliwili.build/Release-appletvsimulator/Objects-normal/arm64/wiliwili.LinkFileList -Xlinker -rpath -Xlinker /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/deps/lib -dead_strip -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/build/wiliwili.build/Release-appletvsimulator/Objects-normal/arm64/wiliwili_dependency_info.dat -stdlib\=libc++ -Wl,-search_paths_first -Wl,-headerpad_max_install_names /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/Release-appletvsimulator/libborealis.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/lib/Release/liblunasvg.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/Release-appletvsimulator/libpystring.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/Release-appletvsimulator/libpdr.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/mongoose/Release-appletvsimulator/libmongoose.a -lz -lmpv -lavcodec -lavformat -lavutil -lavfilter -lavdevice -lswresample -lswscale -framework CoreMedia -framework CoreText -framework VideoToolbox /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/cpr/cpr/Release-appletvsimulator/libcpr.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/_deps/curl-build/lib/Release-appletvsimulator/libcurl.a -framework Security -framework CoreFoundation -framework CoreServices /Applications/Xcode_16.4.app/Contents/Developer/Platforms/AppleTVSimulator.platform/Developer/SDKs/AppleTVSimulator18.5.sdk/usr/lib/libz.tbd /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/Release-appletvsimulator/libqrcode.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/lib/extern/fmt/Release-appletvsimulator/libfmt.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/lib/extern/yoga/yoga/Release-appletvsimulator/libyogacore.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/lib/extern/libromfs/lib/Release-appletvsimulator/libromfs-wiliwili.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/lib/extern/SDL/Release-appletvsimulator/libSDL2.a -lm -liconv -Wl,-framework,CoreVideo -Wl,-framework,CoreAudio -Wl,-framework,AudioToolbox -Wl,-framework,AVFoundation -Wl,-framework,CoreBluetooth -Wl,-framework,CoreGraphics -Wl,-framework,Foundation -Wl,-weak_framework,GameController -Wl,-framework,Metal -Wl,-framework,OpenGLES -Wl,-framework,QuartzCore -Wl,-framework,UIKit -Wl,-weak_framework,CoreHaptics -lpthread /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/lib/extern/SDL/Release-appletvsimulator/libSDL2main.a /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/library/borealis/library/Release-appletvsimulator/libtinyxml2.a -o /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/Release-appletvsimulator/wiliwili.app/wiliwili
+9390-ld: warning: search path '/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/deps/lib/Release-appletvsimulator' not found
+9391:Undefined symbols for architecture arm64:
+9392-  "___gmpz_add_ui", referenced from:
+9393-      _ff_dh_generate_public_key in libavformat.a[arm64][133](rtmpdh.o)
+9394-  "___gmpz_clear", referenced from:
+9395-      _ff_dh_free in libavformat.a[arm64][133](rtmpdh.o)
+9396-      _ff_dh_free in libavformat.a[arm64][133](rtmpdh.o)
+9397-      _ff_dh_free in libavformat.a[arm64][133](rtmpdh.o)
+9398-      _ff_dh_free in libavformat.a[arm64][133](rtmpdh.o)
+9399-      _ff_dh_generate_public_key in libavformat.a[arm64][133](rtmpdh.o)
 --
-10603-      _parse_manifest in libavformat.a[arm64][36](dashdec.o)
-10604-ld: symbol(s) not found for architecture arm64
-10605:clang++: error: linker command failed with exit code 1 (use -v to see invocation)
-10606-
-10607-note: Run script build phase 'Generate library/borealis/library/lib/extern/SDL/CMakeFiles/sdl_headers_copy' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'sdl_headers_copy' from project 'wiliwili')
-10608-note: Run script build phase 'Generate CMakeFiles/ZERO_CHECK' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'ZERO_CHECK' from project 'wiliwili')
-10609-note: Run script build phase 'Generate CMakeFiles/ALL_BUILD' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'ALL_BUILD' from project 'wiliwili')
-10610-** BUILD FAILED **
-10611-
-10612-
-10613-The following build commands failed:
+10589-      _parse_manifest in libavformat.a[arm64][36](dashdec.o)
+10590-ld: symbol(s) not found for architecture arm64
+10591:clang++: error: linker command failed with exit code 1 (use -v to see invocation)
+10592-
+10593-ProcessInfoPlistFile /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/Release-appletvsimulator/wiliwili.app/Info.plist /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/CMakeFiles/wiliwili.dir/Info.plist (in target 'wiliwili' from project 'wiliwili')
+10594-    cd /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili
+10595-    builtin-infoPlistUtility /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/CMakeFiles/wiliwili.dir/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/Release-appletvsimulator/wiliwili.app/PkgInfo -expandbuildsettings -format binary -platform appletvsimulator -additionalcontentfile /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/build/wiliwili.build/Release-appletvsimulator/Splash-SBPartialInfo.plist -additionalcontentfile /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/build/wiliwili.build/Release-appletvsimulator/assetcatalog_generated_info.plist -o /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/Release-appletvsimulator/wiliwili.app/Info.plist
+10596-warning: User supplied UIDeviceFamily key in the Info.plist will be overwritten. Please use the build setting TARGETED_DEVICE_FAMILY and remove UIDeviceFamily from your Info.plist. (in target 'wiliwili' from project 'wiliwili')
+10597-/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/wiliwili.xcodeproj: warning: User-supplied CFBundleIdentifier value 'cn.xfangfang.wiliwili' in the Info.plist must be the same as the PRODUCT_BUNDLE_IDENTIFIER build setting value ''. (in target 'wiliwili' from project 'wiliwili')
+10598-
+10599-LinkStoryboards (in target 'wiliwili' from project 'wiliwili')
 ===== tail 06-cmake-build.log =====
-      _parse_manifest in libavformat.a[arm64][36](dashdec.o)
-  "_xmlCopyNode", referenced from:
-      _parse_manifest in libavformat.a[arm64][36](dashdec.o)
-  "_xmlDocGetRootElement", referenced from:
-      _parse_manifest in libavformat.a[arm64][36](dashdec.o)
-  "_xmlFirstElementChild", referenced from:
-      _parse_manifest in libavformat.a[arm64][36](dashdec.o)
-      _parse_manifest in libavformat.a[arm64][36](dashdec.o)
-      _parse_manifest in libavformat.a[arm64][36](dashdec.o)
       _parse_manifest in libavformat.a[arm64][36](dashdec.o)
       _parse_manifest in libavformat.a[arm64][36](dashdec.o)
       _parse_manifest in libavformat.a[arm64][36](dashdec.o)
@@ -165,7 +156,16 @@ run=8 sha=c4294936b00c54d267c13a350182c4009773a1f4 date=2026-07-05T14:47:15Z
 ld: symbol(s) not found for architecture arm64
 clang++: error: linker command failed with exit code 1 (use -v to see invocation)
 
-note: Run script build phase 'Generate library/borealis/library/lib/extern/SDL/CMakeFiles/sdl_headers_copy' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'sdl_headers_copy' from project 'wiliwili')
+ProcessInfoPlistFile /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/Release-appletvsimulator/wiliwili.app/Info.plist /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/CMakeFiles/wiliwili.dir/Info.plist (in target 'wiliwili' from project 'wiliwili')
+    cd /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili
+    builtin-infoPlistUtility /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/CMakeFiles/wiliwili.dir/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/Release-appletvsimulator/wiliwili.app/PkgInfo -expandbuildsettings -format binary -platform appletvsimulator -additionalcontentfile /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/build/wiliwili.build/Release-appletvsimulator/Splash-SBPartialInfo.plist -additionalcontentfile /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/build/wiliwili.build/Release-appletvsimulator/assetcatalog_generated_info.plist -o /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/Release-appletvsimulator/wiliwili.app/Info.plist
+warning: User supplied UIDeviceFamily key in the Info.plist will be overwritten. Please use the build setting TARGETED_DEVICE_FAMILY and remove UIDeviceFamily from your Info.plist. (in target 'wiliwili' from project 'wiliwili')
+/Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/wiliwili.xcodeproj: warning: User-supplied CFBundleIdentifier value 'cn.xfangfang.wiliwili' in the Info.plist must be the same as the PRODUCT_BUNDLE_IDENTIFIER build setting value ''. (in target 'wiliwili' from project 'wiliwili')
+
+LinkStoryboards (in target 'wiliwili' from project 'wiliwili')
+    cd /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili
+    /Applications/Xcode_16.4.app/Contents/Developer/usr/bin/ibtool --errors --warnings --notices --module wiliwili --target-device tv --minimum-deployment-target 14.0 --output-format human-readable-text --link /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/Release-appletvsimulator/wiliwili.app /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/build/wiliwili.build/Release-appletvsimulator/Splash.storyboardc
+
 note: Run script build phase 'Generate CMakeFiles/ZERO_CHECK' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'ZERO_CHECK' from project 'wiliwili')
 note: Run script build phase 'Generate CMakeFiles/ALL_BUILD' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'ALL_BUILD' from project 'wiliwili')
 ** BUILD FAILED **
@@ -212,7 +212,7 @@ CMake Deprecation Warning at /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-c
   to work with policies introduced by <max> or earlier.
 Call Stack (most recent call first):
   /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/CMakeFiles/4.3.4/CMakeSystem.cmake:6 (include)
-  /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/CMakeFiles/CMakeScratch/TryCompile-fWdMIz/CMakeLists.txt:5 (project)
+  /Users/runner/work/wiliwili-tvos-ci/wiliwili-tvos-ci/wiliwili/build-tvsim/CMakeFiles/CMakeScratch/TryCompile-oztftw/CMakeLists.txt:5 (project)
 
 
 -- Performing Test COMPILER_SUPPORTS_FOBJC_ARC - Success
@@ -224,8 +224,8 @@ Call Stack (most recent call first):
   CMakeLists.txt:261 (ios_bundle)
 
 
--- Configuring done (390.5s)
--- Generating done (0.3s)
+-- Configuring done (495.2s)
+-- Generating done (0.5s)
 CMake Warning:
   Manually-specified variables were not used by the project:
 
