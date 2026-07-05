@@ -206,7 +206,7 @@ jobs:
           Version: ${MPVKIT_TAG}
           Description: mpv media player (tvOS simulator, from MPVKit)
           Libs: -L\${libdir} -lmpv
-          Libs.private: -lavcodec -lavformat -lavutil -lavfilter -lavdevice -lswresample -lswscale${TP_LIBS} -lxml2 -lbz2 -lexpat -lresolv -lc++ -framework AVFoundation -framework CoreAudio -framework AudioToolbox -framework CoreVideo -framework CoreMedia -framework VideoToolbox -framework Metal -framework CoreText -framework CoreFoundation -lc++ -lz -liconv -lbz2 -lexpat -lresolv -lxml2
+          Libs.private: -lavcodec -lavformat -lavutil -lavfilter -lavdevice -lswresample -lswscale${TP_LIBS} -lxml2 -lbz2 -lexpat -lresolv -lc++ -framework AVFoundation -framework CoreAudio -framework AudioToolbox -framework CoreVideo -framework CoreMedia -framework VideoToolbox -framework Metal -framework IOSurface -framework QuartzCore -framework CoreGraphics -framework CoreText -framework CoreFoundation -lc++ -lz -liconv -lbz2 -lexpat -lresolv -lxml2
           Cflags: -I\${includedir}
           EOF
           echo "--- mpv.pc ---" | tee -a "${LOG_DIR}/04-mpvkit.log"
