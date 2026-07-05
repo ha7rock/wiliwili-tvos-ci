@@ -126,8 +126,19 @@ jobs:
             test -n "${a}" || { echo "ERROR: no static lib in ${fw} slice"; exit 1; }
             lower="$(echo "${fw}" | tr '[:upper:]' '[:lower:]')"
             cp "${a}" "${DEPS_DIR}/lib/${lower}.a"
-            hdr="$(find "${sdir}" -maxdepth 3 -type d -name Headers | head -n1 || true)"
-            [ -n "${hdr}" ] && cp -R "${hdr}/." "${DEPS_DIR}/include/" 2>/dev/null || true
+            # 只拷 Libmpv 的头（编译期仅需 <mpv/*.h>）；FFmpeg 各库的平铺头
+            # 含 time.h 等会遮蔽系统头（曾致 libc++ 'incomplete type tm' 全面编译失败），一律不拷
+            if [ "${fw}" = "Libmpv" ]; then
+              hdr="$(find "${sdir}" -maxdepth 3 -type d -name Headers | head -n1 || true)"
+              if [ -n "${hdr}" ]; then
+                if [ -d "${hdr}/mpv" ]; then
+                  cp -R "${hdr}/." "${DEPS_DIR}/include/"
+                else
+                  mkdir -p "${DEPS_DIR}/include/mpv"
+                  cp -R "${hdr}/." "${DEPS_DIR}/include/mpv/"
+                fi
+              fi
+            fi
           done
 
           # 用 sed 去掉 YAML 块缩进，避免把前导空格写进 .pc（strict pkg-config 会报错）
