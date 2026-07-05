@@ -141,25 +141,61 @@ jobs:
             fi
           done
 
-          # gmp：gnutls 的传递依赖，未并入 libmpv.a（run#8 链接错 ___gmpz_*）。
-          # 资产在 mpvkit/gnutls-build（非 MPVKit release），URL 实抓自 0.41.0 Package.swift。
-          GMP_URL="https://github.com/mpvkit/gnutls-build/releases/download/3.8.11/gmp.xcframework.zip"
-          zip="${MPVKIT_DIR}/gmp.xcframework.zip"
-          echo "downloading gmp ..." | tee -a "${LOG_DIR}/04-mpvkit.log"
-          curl -fSL --retry 3 --retry-delay 3 -o "${zip}" "${GMP_URL}" 2>&1 | tee -a "${LOG_DIR}/04-mpvkit.log"
-          rm -rf "${MPVKIT_DIR}/gmp.xcframework"
-          unzip -q -o "${zip}" -d "${MPVKIT_DIR}"
-          xcf="$(find "${MPVKIT_DIR}" -maxdepth 1 -iname 'gmp.xcframework' | head -n1)"
-          slice="$(sim_slice_of "${xcf}")" || { echo "ERROR: gmp has no tvOS-simulator slice"; exit 1; }
-          echo "gmp: simulator slice = ${slice}" | tee -a "${LOG_DIR}/04-mpvkit.log"
-          # run#9：gmp 切片内无 *.a——xcframework 为 framework 布局（gmp.framework/gmp 无扩展名二进制），
-          # 与主循环 FWS 的 fallback 同法：按文件名 gmp 兜底查找
-          a="$(find "${xcf}/${slice}" -maxdepth 4 -name '*.a' | head -n1 || true)"
-          if [ -z "${a}" ]; then
-            a="$(find "${xcf}/${slice}" -maxdepth 4 -type f -name 'gmp' | head -n1 || true)"
-          fi
-          test -n "${a}" || { echo "ERROR: no static lib in gmp slice"; find "${xcf}/${slice}" -maxdepth 4 | head -n 30; exit 1; }
-          cp "${a}" "${DEPS_DIR}/lib/libgmp.a"
+          # 第三方传递依赖：run#10 证实 libmpv.a 未合并 libass/libplacebo 等
+          # （run#8 摘要头尾截断曾误判只缺 gmp/xml2）。完整清单+URL 实抓自
+          # 0.41.0 Package.swift 非 GPL binaryTargets（AUTO_GENERATE 段）。
+          THIRD_PARTY=(
+            "openssl-build/releases/download/3.3.5/Libcrypto"
+            "openssl-build/releases/download/3.3.5/Libssl"
+            "gnutls-build/releases/download/3.8.11/gmp"
+            "gnutls-build/releases/download/3.8.11/nettle"
+            "gnutls-build/releases/download/3.8.11/hogweed"
+            "gnutls-build/releases/download/3.8.11/gnutls"
+            "libass-build/releases/download/0.17.4/Libunibreak"
+            "libass-build/releases/download/0.17.4/Libfreetype"
+            "libass-build/releases/download/0.17.4/Libfribidi"
+            "libass-build/releases/download/0.17.4/Libharfbuzz"
+            "libass-build/releases/download/0.17.4/Libass"
+            "libsmbclient-build/releases/download/4.15.13-2512/Libsmbclient"
+            "libbluray-build/releases/download/1.4.0/Libbluray"
+            "libuavs3d-build/releases/download/1.2.1-xcode/Libuavs3d"
+            "libdovi-build/releases/download/3.3.2/Libdovi"
+            "moltenvk-build/releases/download/1.4.1/MoltenVK"
+            "libshaderc-build/releases/download/2025.5.0/Libshaderc_combined"
+            "lcms2-build/releases/download/2.17.0/lcms2"
+            "libplacebo-build/releases/download/7.351.0-2512/Libplacebo"
+            "libdav1d-build/releases/download/1.5.2-xcode/Libdav1d"
+            "libuchardet-build/releases/download/0.0.8-xcode/Libuchardet"
+            "libluajit-build/releases/download/2.1.0-xcode/Libluajit"
+          )
+          TP_LIBS=""
+          for entry in "${THIRD_PARTY[@]}"; do
+            name="${entry##*/}"
+            url="https://github.com/mpvkit/${entry}.xcframework.zip"
+            zip="${MPVKIT_DIR}/${name}.xcframework.zip"
+            echo "downloading ${name} ..." | tee -a "${LOG_DIR}/04-mpvkit.log"
+            curl -fSL --retry 3 --retry-delay 3 -o "${zip}" "${url}" 2>&1 | tee -a "${LOG_DIR}/04-mpvkit.log"
+            rm -rf "${MPVKIT_DIR}/${name}.xcframework"
+            unzip -q -o "${zip}" -d "${MPVKIT_DIR}"
+            xcf="$(find "${MPVKIT_DIR}" -maxdepth 1 -iname "${name}.xcframework" | head -n1)"
+            slice="$(sim_slice_of "${xcf}")" || {
+              echo "WARN: ${name} has no tvOS-simulator slice, skipping" | tee -a "${LOG_DIR}/04-mpvkit.log"; continue; }
+            base="${name#Lib}"
+            # 布局兼容：静态库布局（*.a）或 framework 布局（无扩展名二进制，如 gmp.framework/gmp，run#9 教训）
+            a="$(find "${xcf}/${slice}" -maxdepth 4 -name '*.a' | head -n1 || true)"
+            if [ -z "${a}" ]; then
+              a="$(find "${xcf}/${slice}" -maxdepth 4 -type f \( -name "${base}" -o -name "${name}" \) | head -n1 || true)"
+            fi
+            if [ -z "${a}" ]; then
+              echo "WARN: no static lib in ${name} slice, skipping" | tee -a "${LOG_DIR}/04-mpvkit.log"
+              find "${xcf}/${slice}" -maxdepth 4 | head -n 20 | tee -a "${LOG_DIR}/04-mpvkit.log"; continue
+            fi
+            cp "${a}" "${DEPS_DIR}/lib/lib${base}.a"
+            TP_LIBS="${TP_LIBS} -l${base}"
+            echo "${name}: -> lib${base}.a (slice ${slice})" | tee -a "${LOG_DIR}/04-mpvkit.log"
+          done
+          echo "TP_LIBS=${TP_LIBS}" | tee -a "${LOG_DIR}/04-mpvkit.log"
+          echo "TP_LIBS=${TP_LIBS}" >> "${GITHUB_ENV}"
 
           # 用 sed 去掉 YAML 块缩进，避免把前导空格写进 .pc（strict pkg-config 会报错）
           sed 's/^          //' > "${DEPS_DIR}/lib/pkgconfig/mpv.pc" <<EOF
@@ -170,7 +206,7 @@ jobs:
           Version: ${MPVKIT_TAG}
           Description: mpv media player (tvOS simulator, from MPVKit)
           Libs: -L\${libdir} -lmpv
-          Libs.private: -lavcodec -lavformat -lavutil -lavfilter -lavdevice -lswresample -lswscale -lgmp -lxml2 -lbz2 -lexpat -lresolv -lc++ -framework AVFoundation -framework CoreAudio -framework AudioToolbox -framework CoreVideo -framework CoreMedia -framework VideoToolbox -framework Metal -framework CoreText -framework CoreFoundation -lc++ -lz -liconv -lbz2 -lexpat -lresolv -lxml2
+          Libs.private: -lavcodec -lavformat -lavutil -lavfilter -lavdevice -lswresample -lswscale${TP_LIBS} -lxml2 -lbz2 -lexpat -lresolv -lc++ -framework AVFoundation -framework CoreAudio -framework AudioToolbox -framework CoreVideo -framework CoreMedia -framework VideoToolbox -framework Metal -framework CoreText -framework CoreFoundation -lc++ -lz -liconv -lbz2 -lexpat -lresolv -lxml2
           Cflags: -I\${includedir}
           EOF
           echo "--- mpv.pc ---" | tee -a "${LOG_DIR}/04-mpvkit.log"
@@ -194,7 +230,7 @@ jobs:
             -DHAVE_POLL_FINE_EXITCODE__TRYRUN_OUTPUT="" \
             -DCURL_USE_LIBPSL=OFF \
             -DCURL_USE_LIBSSH2=OFF \
-            -DCMAKE_EXE_LINKER_FLAGS="-L${DEPS_DIR}/lib -lgmp -lxml2" \
+            -DCMAKE_EXE_LINKER_FLAGS="-L${DEPS_DIR}/lib ${TP_LIBS} -lxml2 -lbz2 -lexpat -lresolv -liconv -lz -framework AVFoundation -framework CoreMedia -framework CoreVideo -framework VideoToolbox -framework AudioToolbox -framework CoreAudio -framework Metal -framework MetalKit -framework QuartzCore -framework IOSurface -framework CoreImage -framework CoreText -framework CoreGraphics -framework Security -framework Network -framework SystemConfiguration" \
             -DDEPLOYMENT_TARGET="${DEPLOYMENT_TARGET}" \
             -DCMAKE_BUILD_TYPE="${BUILD_CONFIG}" \
             2>&1 | tee "${LOG_DIR}/05-cmake-configure.log"
