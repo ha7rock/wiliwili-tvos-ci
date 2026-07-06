@@ -1,0 +1,23 @@
+diff --git a/wiliwili/source/utils/config_helper.cpp b/wiliwili/source/utils/config_helper.cpp
+index 0a7cb4a..ac44c2f 100644
+--- a/wiliwili/source/utils/config_helper.cpp
++++ b/wiliwili/source/utils/config_helper.cpp
+@@ -200,8 +200,18 @@ std::unordered_map<SettingItem, ProgramOption> ProgramConfig::SETTING_MAP = {
+     {SettingItem::PLAYER_HWDEC_CUSTOM, {"player_hwdec_custom", {}, {}, 0}},
+     {SettingItem::PLAYER_EXIT_FULLSCREEN_ON_END, {"player_exit_fullscreen_on_end", {}, {}, 1}},
+     {SettingItem::PLAYER_WINDOW_FULLSCREEN_ON_APP_FULLSCREEN, {"player_window_fullscreen_on_app_fullscreen", {}, {}, 0}},
++#if defined(TVOS)
++    // tvOS(Siri Remote)默认自动全屏 + TV 遥控 OSD 模式(WP5)：
++    //  - 自动全屏：进入播放页立即呈现全屏播放器 Activity，符合 tvOS 电视端预期，
++    //    并让 Menu/Back(BUTTON_B)成为单层、可预期的退出动作。
++    //  - TV OSD 模式：OSD 隐藏时方向环 左/右 直接步进快退/快进，OK(BUTTON_A)聚焦后
++    //    切换播放/暂停，OSD 自动隐藏——对应 WP1 播放态映射，不新造 UI。
++    {SettingItem::PLAYER_AUTO_FULLSCREEN, {"player_auto_fullscreen", {}, {}, 1}},
++    {SettingItem::PLAYER_OSD_TV_MODE, {"player_osd_tv_mode", {}, {}, 1}},
++#else
+     {SettingItem::PLAYER_AUTO_FULLSCREEN, {"player_auto_fullscreen", {}, {}, 0}},
+     {SettingItem::PLAYER_OSD_TV_MODE, {"player_osd_tv_mode", {}, {}, 0}},
++#endif
+     {SettingItem::OPENCC_ON, {"opencc", {}, {}, 1}},
+     {SettingItem::DANMAKU_ON, {"danmaku", {}, {}, 1}},
+     {SettingItem::DANMAKU_FILTER_BOTTOM, {"danmaku_filter_bottom", {}, {}, 1}},
