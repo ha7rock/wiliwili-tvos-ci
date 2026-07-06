@@ -1,0 +1,35 @@
+diff --git a/wiliwili/source/utils/config_helper.cpp b/wiliwili/source/utils/config_helper.cpp
+index ac44c2f..4fb697e 100644
+--- a/wiliwili/source/utils/config_helper.cpp
++++ b/wiliwili/source/utils/config_helper.cpp
+@@ -708,9 +708,30 @@ void ProgramConfig::load() {
+ #endif
+ 
+     // 初始化FPS限制
++#if defined(TVOS)
++    // === WP6 tvOS 渲染循环节流 ===
++    // 根因：borealis 主循环 (Application::internalMainLoop) 仅在
++    // limitedFrameTime>0 时才主动 sleep 限帧 (application.cpp)，否则完全依赖
++    // SDL_GL_SwapWindow 的 vsync 阻塞来控制节奏。tvOS 模拟器的 GLES→Metal
++    // 转译层不会在 swap 上阻塞等待 vblank，导致 LIMITED_FPS 默认 0 时主循环
++    // 空转 → CPU 99-100%。
++    // 修复：tvOS 默认把限帧兜底为 60fps，复用 borealis 现成的高精度 sleep 限帧器
++    //（无需手写计时），用户仍可在设置里改。真机上 vsync 通常有效，60fps 限帧
++    // 只是与其取最小值，不会造成额外开销。
++    int limitedFPS = getSettingItem(SettingItem::LIMITED_FPS, 60);
++#else
+     int limitedFPS = getSettingItem(SettingItem::LIMITED_FPS, 0);
++#endif
+     brls::Application::setLimitedFPS(limitedFPS);
++#if defined(TVOS)
++    // tvOS：即便启用了 60fps 兜底限帧，也保留 swapInterval=1，让真机上的 GLES
++    // vsync 作为额外节流后盾（模拟器转译层会忽略它，但无副作用），确保
++    // SDL_GL_SetSwapInterval(1) 在 tvOS 路径被调用（见 borealis sdl_video.cpp
++    // setSwapInterval → SDL_GL_SetSwapInterval）。
++    VideoContext::swapInterval = getSettingItem(SettingItem::SWAP_INTERVAL, 1);
++#else
+     VideoContext::swapInterval = limitedFPS == 0 ? getSettingItem(SettingItem::SWAP_INTERVAL, 1) : 0;
++#endif
+ 
+     // 初始化进入闲置状态需要的时间 (ms);
+     int deactivatedTime = getSettingItem(SettingItem::DEACTIVATED_TIME, 0);
