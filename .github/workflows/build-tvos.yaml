@@ -79,6 +79,30 @@ jobs:
             echo "patch applied" | tee -a "${LOG_DIR}/03-patch.log"
           fi
 
+      - name: Apply tvOS input patches (WP5 / 0003 wiliwili, 0004 borealis)
+        run: |
+          set -euo pipefail
+          # 0003 叠加在 0002 之上，作用于 wiliwili 源码树
+          P3="${GITHUB_WORKSPACE}/patches/0003-wiliwili-tvos-input.patch"
+          test -f "${P3}" || { echo "patch not found: ${P3}"; exit 1; }
+          if git -C "${SRC_DIR}" apply --reverse --check "${P3}" >/dev/null 2>&1; then
+            echo "0003 already applied" | tee "${LOG_DIR}/03b-patch-input.log"
+          else
+            git -C "${SRC_DIR}" apply --check "${P3}" 2>&1 | tee "${LOG_DIR}/03b-patch-input.log"
+            git -C "${SRC_DIR}" apply "${P3}"
+            echo "0003 applied" | tee -a "${LOG_DIR}/03b-patch-input.log"
+          fi
+          # 0004 作用于 borealis 子模块 (SDL 平台层：tvOS Siri Remote 输入 hint)
+          P4="${GITHUB_WORKSPACE}/patches/0004-borealis-tvos-input.patch"
+          test -f "${P4}" || { echo "patch not found: ${P4}"; exit 1; }
+          if git -C "${SRC_DIR}/library/borealis" apply --reverse --check "${P4}" >/dev/null 2>&1; then
+            echo "0004 already applied" | tee -a "${LOG_DIR}/03b-patch-input.log"
+          else
+            git -C "${SRC_DIR}/library/borealis" apply --check "${P4}" 2>&1 | tee -a "${LOG_DIR}/03b-patch-input.log"
+            git -C "${SRC_DIR}/library/borealis" apply "${P4}"
+            echo "0004 applied" | tee -a "${LOG_DIR}/03b-patch-input.log"
+          fi
+
       - name: Build libromfs-generator (host tool, required by USE_LIBROMFS)
         run: |
           set -euo pipefail
