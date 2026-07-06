@@ -103,6 +103,21 @@ jobs:
             echo "0004 applied" | tee -a "${LOG_DIR}/03b-patch-input.log"
           fi
 
+      - name: Apply tvOS render-throttle patch (WP6 / 0005 wiliwili)
+        run: |
+          set -euo pipefail
+          # 0005 叠加在 0002/0003 之上，作用于 wiliwili 源码树 (config_helper.cpp)
+          # tvOS 默认启用 60fps 兜底限帧 + 保留 vsync，修复模拟器主循环空转 CPU 100%
+          P5="${GITHUB_WORKSPACE}/patches/0005-wiliwili-render-throttle.patch"
+          test -f "${P5}" || { echo "patch not found: ${P5}"; exit 1; }
+          if git -C "${SRC_DIR}" apply --reverse --check "${P5}" >/dev/null 2>&1; then
+            echo "0005 already applied" | tee "${LOG_DIR}/03c-patch-throttle.log"
+          else
+            git -C "${SRC_DIR}" apply --check "${P5}" 2>&1 | tee "${LOG_DIR}/03c-patch-throttle.log"
+            git -C "${SRC_DIR}" apply "${P5}"
+            echo "0005 applied" | tee -a "${LOG_DIR}/03c-patch-throttle.log"
+          fi
+
       - name: Build libromfs-generator (host tool, required by USE_LIBROMFS)
         run: |
           set -euo pipefail
