@@ -1,22 +1,28 @@
 diff --git a/library/lib/platforms/sdl/sdl_platform.cpp b/library/lib/platforms/sdl/sdl_platform.cpp
-index b858d0e..6bf68b0 100644
+index b858d0e0..6cc74eeb 100644
 --- a/library/lib/platforms/sdl/sdl_platform.cpp
 +++ b/library/lib/platforms/sdl/sdl_platform.cpp
-@@ -52,6 +52,21 @@ SDLPlatform::SDLPlatform()
+@@ -52,6 +52,27 @@ SDLPlatform::SDLPlatform()
          SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
      }
      SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "0");
 +#if defined(TVOS)
-+    // === tvOS Siri Remote 输入策略 (WP5) ===
-+    // 默认情况下 tvOS 上 Siri Remote 的 Menu 键、方向点按等由 UIKit 作为
-+    // "UI 事件" 处理, SDL 收不到对应的 controller/键盘事件 —— 这会导致
-+    // 播放页按 Menu 无法退出 (BUTTON_B 永不触发)。
-+    // 设为 "1" 让这些按键作为 SDL GameController / 键盘事件下发, 从而进入
-+    // borealis 的 BUTTON_* 映射 (Menu -> SDL_CONTROLLER_BUTTON_B -> BUTTON_B)。
-+    // 必须在 SDL_Init / 首次打开 controller 之前设置。
-+    SDL_SetHint(SDL_HINT_APPLE_TV_CONTROLLER_UI_EVENTS, "1");
-+    // 把 Siri Remote 暴露为一个 joystick/GameController, 方向点按环映射为
-+    // dpad, 中心点按映射为 A。设为 "1" (亦为 SDL 默认) 显式声明以防被外部覆盖。
++    // === tvOS 输入策略 (WP5 引入, WP10 修正) ===
++    // 当前目标形态: 游戏手柄 (MFi/GameController), 本阶段不测 Siri Remote。
++    // 手柄的 A/B/X/Y/dpad 物理键由 GCController 的 value-changed handler 直接读取并作为
++    // SDL_CONTROLLER_BUTTON_* 下发 (SDL2 src/joystick/iphoneos/SDL_mfijoystick.m:1219
++    // gamepad.buttonB.isPressed), 与下面的 APPLE_TV_CONTROLLER_UI_EVENTS 完全无关 ——
++    // 即无论该 hint 取何值, 手柄 B 键都能到达 borealis 的 BUTTON_B。
++    //
++    // APPLE_TV_CONTROLLER_UI_EVENTS 只设置 GCEventViewController.controllerUserInteractionEnabled
++    // (SDL2 src/video/uikit/SDL_uikitviewcontroller.m:44), 仅影响 Siri Remote 的 Menu 键:
++    //   "1" -> controllerUserInteractionEnabled=YES -> 按 Menu 时 UIKit 把 App 切后台;
++    //   "0" -> App 直接接管输入 (borealis 自管焦点), Menu 作为 SDL_CONTROLLER_BUTTON_B 下发。
++    // WP8 曾静态置 "1" 并按栈深动态切换 (期望"顶层 Menu 回主屏"), 但在子层会造成按 Menu 强制
++    // 后台 + GL 残留白屏。WP10 阶段只用手柄, 故取 SDL 默认 "0" —— 这也是旧动态 hint 在子层已
++    // 验证可用 (手柄逐级返回正常) 的值, 把遥控相关折腾清零; 遥控 Menu 语义留待后续 Cycle 处理。
++    SDL_SetHint(SDL_HINT_APPLE_TV_CONTROLLER_UI_EVENTS, "0");
++    // 把 Siri Remote 暴露为 joystick/GameController (对手柄无副作用)。
 +    SDL_SetHint(SDL_HINT_TV_REMOTE_AS_JOYSTICK, "1");
 +    // 禁止把遥控器旋转当作方向输入, 避免误触发导航 (对焦点式 UI 更可控)。
 +    SDL_SetHint(SDL_HINT_APPLE_TV_REMOTE_ALLOW_ROTATION, "0");

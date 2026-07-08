@@ -1,0 +1,36 @@
+diff --git a/wiliwili/source/utils/dialog_helper.cpp b/wiliwili/source/utils/dialog_helper.cpp
+index 327a7bb..2728c9a 100644
+--- a/wiliwili/source/utils/dialog_helper.cpp
++++ b/wiliwili/source/utils/dialog_helper.cpp
+@@ -32,9 +32,18 @@ bool DialogHelper::checkLogin() {
+ 
+ /// 退出应用提示
+ void DialogHelper::quitApp(bool restart) {
++#if defined(TVOS)
++    // WP10: tvOS 上整体短路为 no-op。设置项(主题/语言/缩放/键位/繁简等)变更会调本函数,
++    // 原本弹"设置将在下次启动生效"对话框并在确认后 exitToHomeMode()+quit() 重启应用;
++    // tvOS 不允许 App 主动退出/重启(Apple HIG), quit() 会卡死白屏(见 borealis 0006),
++    // 且 0002 已把该分支的 OK 回调编译为空 -> 只剩一个"点了没反应"的死对话框。
++    // 这里整体短路: 设置已保存, 仅用 toast 提示将于下次手动启动后生效, 不弹对话框、不 quit。
++    (void)restart;
++    brls::Application::notify("wiliwili/setting/quit_hint"_i18n);
++#else
+     auto dialog = new brls::Dialog("wiliwili/setting/quit_hint"_i18n);
+     dialog->addButton("hints/ok"_i18n, [restart]() {
+-#if !defined(IOS) && !defined(TVOS)
++#ifndef IOS
+         brls::Box* container = new brls::Box();
+         container->setJustifyContent(brls::JustifyContent::CENTER);
+         container->setAlignItems(brls::AlignItems::CENTER);
+@@ -48,8 +57,9 @@ void DialogHelper::quitApp(bool restart) {
+         brls::Application::pushActivity(new brls::Activity(container), brls::TransitionAnimation::NONE);
+         brls::Application::getPlatform()->exitToHomeMode(!restart);
+         brls::Application::quit();
+-#endif /* IOS || TVOS */
++#endif /* IOS */
+     });
+     dialog->setCancelable(false);
+     dialog->open();
++#endif /* TVOS */
+ }
+\ No newline at end of file
