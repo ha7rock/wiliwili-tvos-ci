@@ -1,0 +1,90 @@
+diff --git a/library/include/borealis/core/platform.hpp b/library/include/borealis/core/platform.hpp
+index 7913dc2c..06515574 100644
+--- a/library/include/borealis/core/platform.hpp
++++ b/library/include/borealis/core/platform.hpp
+@@ -166,6 +166,17 @@ class Platform
+      */
+     virtual void setWindowAlwaysOnTop(bool enable) {}
+ 
++    /**
++     * tvOS(WP8 Bug A): synchronise the Apple TV "system Menu" behaviour with the
++     * current activity depth.
++     *   atTopLevel == true  -> at the root activity: the Siri Remote Menu button
++     *                          should return to the tvOS home screen (system takes over).
++     *   atTopLevel == false -> inside a pushed activity: the Menu button must reach
++     *                          the app as BUTTON_B so in-app back / dismiss works.
++     * Default: no-op (only the tvOS SDL platform implements it).
++     */
++    virtual void setTopLevelExitMode(bool atTopLevel) {}
++
+     /**
+      * Called at every iteration of the main loop.
+      * Must return false if the app should continue running
+diff --git a/library/include/borealis/platforms/sdl/sdl_platform.hpp b/library/include/borealis/platforms/sdl/sdl_platform.hpp
+index a1da36ae..a3cf21c2 100644
+--- a/library/include/borealis/platforms/sdl/sdl_platform.hpp
++++ b/library/include/borealis/platforms/sdl/sdl_platform.hpp
+@@ -44,6 +44,7 @@ class SDLPlatform : public DesktopPlatform
+     bool isScreenDimmingDisabled() override;
+ 
+     void setWindowAlwaysOnTop(bool enable) override;
++    void setTopLevelExitMode(bool atTopLevel) override;
+     void pasteToClipboard(const std::string& text) override;
+     std::string pasteFromClipboard() override;
+     bool mainLoopIteration() override;
+diff --git a/library/lib/core/application.cpp b/library/lib/core/application.cpp
+index a45103da..d25b812c 100644
+--- a/library/lib/core/application.cpp
++++ b/library/lib/core/application.cpp
+@@ -179,6 +179,11 @@ bool Application::internalMainLoop()
+         return false;
+     }
+ 
++    // tvOS(WP8 Bug A): 每帧按 activity 栈深度同步 Siri Remote Menu 键语义。
++    // 根 Activity(栈深 <=1): Menu = 回 tvOS 主屏 (系统接管); 子 Activity: Menu = BUTTON_B(应用内返回)。
++    // 平台无关调用, 仅 tvOS 的 SDLPlatform 实现具体 SDL hint 切换, 其余平台为 no-op。
++    Application::platform->setTopLevelExitMode(Application::activitiesStack.size() <= 1);
++
+     // Mouse and touch
+     if (Application::blockInputsTokens == 0)
+     {
+diff --git a/library/lib/platforms/sdl/sdl_platform.cpp b/library/lib/platforms/sdl/sdl_platform.cpp
+index 6bf68b08..e1d2760e 100644
+--- a/library/lib/platforms/sdl/sdl_platform.cpp
++++ b/library/lib/platforms/sdl/sdl_platform.cpp
+@@ -66,6 +66,17 @@ SDLPlatform::SDLPlatform()
+     SDL_SetHint(SDL_HINT_TV_REMOTE_AS_JOYSTICK, "1");
+     // 禁止把遥控器旋转当作方向输入, 避免误触发导航 (对焦点式 UI 更可控)。
+     SDL_SetHint(SDL_HINT_APPLE_TV_REMOTE_ALLOW_ROTATION, "0");
++    // === WP8 Bug A 修正 ===
++    // 语义澄清 (核实 SDL2 src/video/uikit/SDL_uikitviewcontroller.m 与 SDL_hints.h):
++    // SDL_HINT_APPLE_TV_CONTROLLER_UI_EVENTS 唯一作用是设置 GCEventViewController
++    // 的 controllerUserInteractionEnabled, 且经 SDL_AddHintCallback 在运行时【动态生效】。
++    //   "1" -> 按 Menu 时系统把 App 切到后台 (回 tvOS 主屏), App 收不到 BUTTON_B;
++    //   "0" -> App 直接收到遥控输入, Menu 作为 SDL_CONTROLLER_BUTTON_B 下发 (mfi
++    //          "grab the menu button" 路径), App 不被切后台。
++    // 因此这里的初值 "1" 只对【根 Activity】正确 (顶层 Menu = 回主屏, 符合 tvOS HIG);
++    // 进入任意子 Activity 后必须切回 "0", 否则每次 Menu 都把 App 切后台 —— 这正是
++    // 用户实测 "退出应用卡白屏" 的来源。运行时切换见 setTopLevelExitMode(), 由
++    // borealis 主循环按 activity 栈深度每帧同步 (SDL_SetHint 值不变时为廉价 no-op)。
+ #endif
+ #elif defined(__APPLE__)
+     // Same behavior as GLFW, change to the app's Resources directory if run in a ".app" bundle
+@@ -132,6 +143,17 @@ void SDLPlatform::restoreWindow()
+     SDL_RestoreWindow(this->videoContext->getSDLWindow());
+ }
+ 
++void SDLPlatform::setTopLevelExitMode(bool atTopLevel)
++{
++#if defined(TVOS)
++    // 顶层 -> "1": Menu 交还系统, 回 tvOS 主屏; 子层 -> "0": Menu 作为 BUTTON_B 进 App 做返回。
++    // SDL_SetHint 内部仅在值变化时触发回调 (SDL_hints.c), 每帧调用安全且廉价。
++    SDL_SetHint(SDL_HINT_APPLE_TV_CONTROLLER_UI_EVENTS, atTopLevel ? "1" : "0");
++#else
++    (void)atTopLevel;
++#endif
++}
++
+ void SDLPlatform::setWindowAlwaysOnTop(bool enable)
+ {
+     SDL_SetWindowAlwaysOnTop(this->videoContext->getSDLWindow(), enable ? SDL_TRUE : SDL_FALSE);

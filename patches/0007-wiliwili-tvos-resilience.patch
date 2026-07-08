@@ -1,0 +1,159 @@
+diff --git a/wiliwili/include/utils/config_helper.hpp b/wiliwili/include/utils/config_helper.hpp
+index 41745e6..fd932a3 100644
+--- a/wiliwili/include/utils/config_helper.hpp
++++ b/wiliwili/include/utils/config_helper.hpp
+@@ -256,6 +256,11 @@ public:
+ 
+     void init();
+ 
++    /**
++     * WP8 Bug B: 主界面成功加载后清除崩溃 marker(tvOS 崩溃黑屏自愈)。
++     */
++    void clearCrashGuard();
++
+     std::string getConfigDir();
+ 
+     std::string getHomePath();
+diff --git a/wiliwili/source/main.cpp b/wiliwili/source/main.cpp
+index f231e06..9788ba3 100644
+--- a/wiliwili/source/main.cpp
++++ b/wiliwili/source/main.cpp
+@@ -57,6 +57,10 @@ int main(int argc, char* argv[]) {
+ 
+     if (brls::Application::getPlatform()->isApplicationMode()) {
+         Intent::openMain();
++#if defined(TVOS)
++        // WP8 Bug B: 主界面(MainActivity)已构建成功 -> 本次启动健康, 清除崩溃 marker。
++        ProgramConfig::instance().clearCrashGuard();
++#endif
+         // Uncomment these lines to debug activities
+         //        Intent::openBV("BV1Da411Y7U4");  // 弹幕防遮挡 (横屏)
+         //        Intent::openBV("BV1iN4y1m7J3");  // 弹幕防遮挡 (竖屏)
+diff --git a/wiliwili/source/utils/config_helper.cpp b/wiliwili/source/utils/config_helper.cpp
+index 4fb697e..1dfd21a 100644
+--- a/wiliwili/source/utils/config_helper.cpp
++++ b/wiliwili/source/utils/config_helper.cpp
+@@ -23,6 +23,37 @@
+ #include "utils/number_helper.hpp"
+ #include "utils/thread_helper.hpp"
+ #include "utils/image_helper.hpp"
++
++#if defined(TVOS)
++#include <fstream>
++#include <cpr/filesystem.h>
++namespace {
++// WP8 Bug B: 原子写 —— 先写 <path>.tmp 再 rename 覆盖目标。
++// POSIX rename(2) 对同一文件系统是原子替换, 崩溃时目标要么是旧完整文件、要么是新完整文件,
++// 不会出现"写到一半的半损坏 JSON"(用户实测的永久黑屏根因形态)。
++bool tvosAtomicWrite(const std::string& path, const std::string& content) {
++    const std::string tmp = path + ".tmp";
++    {
++        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
++        if (!out) return false;
++        out << content;
++        out.flush();
++        if (!out) return false;
++    }
++    std::error_code ec;
++    cpr::fs::rename(tmp, path, ec);
++    if (ec) {
++        // 跨目录/文件系统兜底: 直接覆盖写(非原子, 但优于放弃)。
++        cpr::fs::remove(tmp, ec);
++        std::ofstream out(path, std::ios::binary | std::ios::trunc);
++        if (!out) return false;
++        out << content;
++        return static_cast<bool>(out);
++    }
++    return true;
++}
++} // namespace
++#endif
+ #include "utils/config_helper.hpp"
+ 
+ #include "pystring.h"
+@@ -493,6 +524,45 @@ void ProgramConfig::saveHomeWindowState() {
+ void ProgramConfig::load() {
+     const std::string path = this->getConfigDir() + "/wiliwili_config.json";
+ 
++#if defined(TVOS)
++    // WP8 Bug B: 崩溃黑屏韧性。
++    // marker 文件在 launch 早期创建, 主界面成功加载后由 main.cpp 调 clearCrashGuard() 删除。
++    // 若本次启动时 marker 仍在, 说明上次启动"在主界面就绪前就崩溃"了 —— 结合 README 对
++    // Switch 的同款"删 config"药方, 判定为"读坏配置 -> 再崩"的死循环, 执行自愈:
++    //   1) 把当前(疑似损坏)配置备份到 <path>.crashbak;
++    //   2) 尽量从备份中仅提取登录态(cookie/refreshToken/device/client)重写一份最小配置,
++    //      即"重置设置但保住登录"; 备份本身无法解析时则不重建(全新默认, 登录丢失, 不可避免)。
++    {
++        const std::string marker = this->getConfigDir() + "/.wiliwili_launching";
++        std::error_code ec;
++        if (cpr::fs::exists(marker, ec)) {
++            brls::Logger::error("WP8: detected crash before UI ready -> sanitising config (keep login)");
++            const std::string bak = path + ".crashbak";
++            cpr::fs::remove(bak, ec);
++            cpr::fs::rename(path, bak, ec); // 备份并腾空 path
++            try {
++                std::ifstream bf(bak);
++                if (bf) {
++                    nlohmann::json old;
++                    bf >> old;
++                    bf.close();
++                    nlohmann::json keep = nlohmann::json::object();
++                    for (const char* k : {"cookie", "refreshToken", "device", "client"}) {
++                        if (old.contains(k)) keep[k] = old[k];
++                    }
++                    tvosAtomicWrite(path, keep.dump(2));
++                    brls::Logger::info("WP8: config reset to defaults, login preserved");
++                }
++            } catch (const std::exception& e) {
++                brls::Logger::error("WP8: backup unparseable ({}), fresh start", e.what());
++                cpr::fs::remove(path, ec); // 确保不残留半损坏文件
++            }
++        }
++        // 为本次启动落下 marker(内容仅作调试用途)。
++        tvosAtomicWrite(marker, "launching");
++    }
++#endif
++
+     std::ifstream readFile(path);
+     if (readFile) {
+         try {
+@@ -928,6 +998,16 @@ int ProgramConfig::getStringOptionIndex(SettingItem item) {
+     return optionData.defaultOption;
+ }
+ 
++void ProgramConfig::clearCrashGuard() {
++#if defined(TVOS)
++    // WP8 Bug B: 主界面已成功加载, 清除崩溃 marker —— 本次启动被认定为健康。
++    std::error_code ec;
++    const std::string marker = this->getConfigDir() + "/.wiliwili_launching";
++    cpr::fs::remove(marker, ec);
++    brls::Logger::info("WP8: crash guard cleared (UI ready)");
++#endif
++}
++
+ void ProgramConfig::save() {
+     const std::string path = this->getConfigDir() + "/wiliwili_config.json";
+     // fs is defined in cpr/cpr.h
+@@ -935,6 +1015,14 @@ void ProgramConfig::save() {
+     cpr::fs::create_directories(this->getConfigDir());
+ #endif
+     nlohmann::json content(*this);
++#if defined(TVOS)
++    // WP8 Bug B: tvOS 走原子写(temp+rename), 杜绝写坏配置导致启动早期读坏再崩的死循环。
++    if (!tvosAtomicWrite(path, content.dump(2))) {
++        brls::Logger::error("Cannot atomically write config to: {}", path);
++        return;
++    }
++    brls::Logger::info("Write config to (atomic): {}", path);
++#else
+     std::ofstream writeFile(path);
+     if (!writeFile) {
+         brls::Logger::error("Cannot write config to: {}", path);
+@@ -943,6 +1031,7 @@ void ProgramConfig::save() {
+     writeFile << content.dump(2);
+     writeFile.close();
+     brls::Logger::info("Write config to: {}", path);
++#endif
+ }
+ 
+ void ProgramConfig::checkOnTop() {
