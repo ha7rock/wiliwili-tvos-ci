@@ -140,6 +140,32 @@ jobs:
             echo "0005 applied" | tee -a "${LOG_DIR}/03c-patch-throttle.log"
           fi
 
+      - name: Apply tvOS exit & resilience patches (WP8 / 0006 borealis, 0007 wiliwili)
+        run: |
+          set -euo pipefail
+          # 0007 叠加在 0002/0003/0005 之上，作用于 wiliwili 源码树
+          #   Bug B: config 原子写(temp+rename) + 崩溃 marker 自愈(重置设置保登录) — TVOS 宏隔离
+          P7="${GITHUB_WORKSPACE}/patches/0007-wiliwili-tvos-resilience.patch"
+          test -f "${P7}" || { echo "patch not found: ${P7}"; exit 1; }
+          if git -C "${SRC_DIR}" apply --reverse --check "${P7}" >/dev/null 2>&1; then
+            echo "0007 already applied" | tee "${LOG_DIR}/03d-patch-resilience.log"
+          else
+            git -C "${SRC_DIR}" apply --check "${P7}" 2>&1 | tee "${LOG_DIR}/03d-patch-resilience.log"
+            git -C "${SRC_DIR}" apply "${P7}"
+            echo "0007 applied" | tee -a "${LOG_DIR}/03d-patch-resilience.log"
+          fi
+          # 0006 叠加在 0004 之上，作用于 borealis 子模块 (SDL 平台层 + Application 主循环)
+          #   Bug A: Siri Remote Menu 语义按 activity 栈深度动态切换 — 顶层=回主屏, 子层=应用内返回
+          P6="${GITHUB_WORKSPACE}/patches/0006-borealis-tvos-exit-menu.patch"
+          test -f "${P6}" || { echo "patch not found: ${P6}"; exit 1; }
+          if git -C "${SRC_DIR}/library/borealis" apply --reverse --check "${P6}" >/dev/null 2>&1; then
+            echo "0006 already applied" | tee -a "${LOG_DIR}/03d-patch-resilience.log"
+          else
+            git -C "${SRC_DIR}/library/borealis" apply --check "${P6}" 2>&1 | tee -a "${LOG_DIR}/03d-patch-resilience.log"
+            git -C "${SRC_DIR}/library/borealis" apply "${P6}"
+            echo "0006 applied" | tee -a "${LOG_DIR}/03d-patch-resilience.log"
+          fi
+
       - name: Build libromfs-generator (host tool, required by USE_LIBROMFS)
         run: |
           set -euo pipefail
