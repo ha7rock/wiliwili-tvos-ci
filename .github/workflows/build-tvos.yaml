@@ -163,7 +163,7 @@ jobs:
             echo "0005 applied" | tee -a "${LOG_DIR}/03c-patch-throttle.log"
           fi
 
-      - name: Apply tvOS exit & resilience patches (WP8 / 0006 borealis, 0007 wiliwili)
+      - name: Apply tvOS resilience + top-exit patches (WP8 0007 wiliwili, WP10 0006 borealis)
         run: |
           set -euo pipefail
           # 0007 叠加在 0002/0003/0005 之上，作用于 wiliwili 源码树
@@ -177,8 +177,11 @@ jobs:
             git -C "${SRC_DIR}" apply "${P7}"
             echo "0007 applied" | tee -a "${LOG_DIR}/03d-patch-resilience.log"
           fi
-          # 0006 叠加在 0004 之上，作用于 borealis 子模块 (SDL 平台层 + Application 主循环)
-          #   Bug A: Siri Remote Menu 语义按 activity 栈深度动态切换 — 顶层=回主屏, 子层=应用内返回
+          # 0006 叠加在 0004 之上，作用于 borealis 子模块 (applet_frame.cpp + application.cpp)
+          #   WP10: 手柄顶层按 B -> AppletFrame::popContentView 原会弹"退出wiliwili?"对话框 ->
+          #   确认调 Application::quit() -> 优雅 teardown 拆 SDL/GL 上下文 = 卡死白屏。修复: 顶层
+          #   退出在 tvOS 直接 std::exit(0)(不弹框、进程立即结束回主屏) + Application::quit() 在
+          #   tvOS 短路 no-op(杜绝其余优雅 quit 路径的白屏)。TVOS 宏隔离, 不影响 Switch/PS4/iOS。
           P6="${GITHUB_WORKSPACE}/patches/0006-borealis-tvos-exit-menu.patch"
           test -f "${P6}" || { echo "patch not found: ${P6}"; exit 1; }
           if git -C "${SRC_DIR}/library/borealis" apply --reverse --check "${P6}" >/dev/null 2>&1; then
@@ -187,6 +190,23 @@ jobs:
             git -C "${SRC_DIR}/library/borealis" apply --check "${P6}" 2>&1 | tee -a "${LOG_DIR}/03d-patch-resilience.log"
             git -C "${SRC_DIR}/library/borealis" apply "${P6}"
             echo "0006 applied" | tee -a "${LOG_DIR}/03d-patch-resilience.log"
+          fi
+
+      - name: Apply tvOS quitApp cleanup patch (WP10 / 0009 wiliwili)
+        run: |
+          set -euo pipefail
+          # 0009 叠加在 0002/0003/0005/0007 之上，作用于 wiliwili 源码树 (dialog_helper.cpp)。
+          #   设置项变更调 DialogHelper::quitApp 在 tvOS 整体 no-op(仅 toast 提示下次启动生效)，
+          #   消除 0002 之后残留的"点了没反应"死对话框。TVOS 宏隔离。
+          #   (WP10 的 borealis 顶层退出根因修复见上一步的 0006 -> applet_frame std::exit(0)。)
+          P9="${GITHUB_WORKSPACE}/patches/0009-wiliwili-tvos-quitapp-noop.patch"
+          test -f "${P9}" || { echo "patch not found: ${P9}"; exit 1; }
+          if git -C "${SRC_DIR}" apply --reverse --check "${P9}" >/dev/null 2>&1; then
+            echo "0009 already applied" | tee "${LOG_DIR}/03e-patch-quitapp.log"
+          else
+            git -C "${SRC_DIR}" apply --check "${P9}" 2>&1 | tee "${LOG_DIR}/03e-patch-quitapp.log"
+            git -C "${SRC_DIR}" apply "${P9}"
+            echo "0009 applied" | tee -a "${LOG_DIR}/03e-patch-quitapp.log"
           fi
 
       - name: Build libromfs-generator (host tool, required by USE_LIBROMFS)
