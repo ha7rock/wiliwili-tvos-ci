@@ -80,6 +80,29 @@ jobs:
           xcodebuild -showsdks | grep -i appletv | tee -a "${LOG_DIR}/00-env.log" || true
 
       # -------------------------------------------------------------------
+      # WP9：程序化生成 App Icon & Top Shelf 的 Brand Assets（Assets.xcassets）。
+      # 脚本来自本 CI 仓库 checkout（scripts/generate-brand-assets.py），logo 源
+      # assets/logo-source.png 可缺失（脚本用占位猫脸 fallback 并 WARN）。
+      # 非致命：生成失败仅告警，后续 actool 步骤会自动跳过，主构建不受影响。
+      - name: Generate tvOS brand assets (App Icon & Top Shelf)
+        run: |
+          set -uo pipefail
+          python3 -m pip install --upgrade pip >/dev/null 2>&1 || true
+          python3 -m pip install pillow --break-system-packages 2>&1 \
+            | tee "${LOG_DIR}/10-brand-pip.log" \
+            || python3 -m pip install --user pillow 2>&1 \
+                 | tee -a "${LOG_DIR}/10-brand-pip.log" || true
+          if python3 "${GITHUB_WORKSPACE}/scripts/generate-brand-assets.py" \
+               --source "${GITHUB_WORKSPACE}/assets/logo-source.png" \
+               --out "${GITHUB_WORKSPACE}/assets/generated" \
+               2>&1 | tee "${LOG_DIR}/10-brand-assets.log"; then
+            echo "brand assets generated" | tee -a "${LOG_DIR}/10-brand-assets.log"
+          else
+            echo "WARN: brand asset generation failed; continuing without custom icon" \
+              | tee -a "${LOG_DIR}/10-brand-assets.log"
+          fi
+
+      # -------------------------------------------------------------------
       - name: Clone wiliwili (yoga, recursive)
         run: |
           set -euo pipefail
@@ -370,6 +393,66 @@ jobs:
           test -n "${APP}" || { echo "wiliwili.app not found"; exit 1; }
           echo "app_path=${APP}" >> "${GITHUB_OUTPUT}"
           echo "found: ${APP}" | tee "${LOG_DIR}/07-locate.log"
+
+      # -------------------------------------------------------------------
+      # WP9：用 actool 编译 brandassets → Assets.car + partial Info.plist，
+      # 拷进 .app 并把图标键（CFBundleIcons 等）合并进 .app/Info.plist。
+      #   --platform 按 TARGET：device=appletvos，simulator=appletvsimulator。
+      # 全程非致命：actool / 合并任何失败仅 WARN 并 exit 0，绝不阻塞主线
+      # （无图标也能出可用 .app；tvOSBundleInfo.plist.in 里 CFBundleIcons 注释占位不动，
+      #   由本步骤的 partial plist 合并接管）。
+      - name: Compile brand assets (actool) & merge into .app [non-fatal]
+        if: always()
+        run: |
+          set +e
+          APP="${{ steps.locate.outputs.app_path }}"
+          XC="${GITHUB_WORKSPACE}/assets/generated/Assets.xcassets"
+          LOG="${LOG_DIR}/11-actool.log"
+          : > "${LOG}"
+          if [ -z "${APP}" ] || [ ! -d "${APP}" ]; then
+            echo "WARN: .app not located; skip actool (non-fatal)" | tee -a "${LOG}"; exit 0
+          fi
+          if [ ! -d "${XC}" ]; then
+            echo "WARN: ${XC} missing (generation skipped/failed); build keeps default icon" \
+              | tee -a "${LOG}"; exit 0
+          fi
+          if [ "${TARGET}" = "device" ]; then ACPLAT="appletvos"; else ACPLAT="appletvsimulator"; fi
+          OUTDIR="$(mktemp -d)"
+          PARTIAL="${OUTDIR}/actool-partial.plist"
+          echo "actool platform=${ACPLAT} xcassets=${XC}" | tee -a "${LOG}"
+          xcrun actool "${XC}" \
+            --compile "${OUTDIR}" \
+            --platform "${ACPLAT}" \
+            --minimum-deployment-target "${DEPLOYMENT_TARGET}" \
+            --target-device tv \
+            --app-icon "App Icon" \
+            --output-partial-info-plist "${PARTIAL}" \
+            --errors --warnings --notices 2>&1 | tee -a "${LOG}"
+          rc=${PIPESTATUS[0]}
+          if [ "${rc}" != "0" ]; then
+            echo "WARN: actool failed (rc=${rc}); continuing without icon (non-fatal)" \
+              | tee -a "${LOG}"; exit 0
+          fi
+          CAR="${OUTDIR}/Assets.car"
+          if [ -f "${CAR}" ]; then
+            cp "${CAR}" "${APP}/Assets.car"
+            echo "copied Assets.car -> ${APP}/Assets.car" | tee -a "${LOG}"
+          else
+            echo "WARN: no Assets.car produced (non-fatal)" | tee -a "${LOG}"
+          fi
+          if [ -f "${PARTIAL}" ]; then
+            echo "--- actool partial Info.plist ---" | tee -a "${LOG}"
+            cat "${PARTIAL}" | tee -a "${LOG}"
+            if /usr/libexec/PlistBuddy -c "Merge ${PARTIAL}" "${APP}/Info.plist" 2>&1 | tee -a "${LOG}"; then
+              echo "merged partial Info.plist keys (CFBundleIcons etc.) into .app/Info.plist" \
+                | tee -a "${LOG}"
+            else
+              echo "WARN: PlistBuddy merge failed (non-fatal)" | tee -a "${LOG}"
+            fi
+          else
+            echo "WARN: no partial Info.plist produced (non-fatal)" | tee -a "${LOG}"
+          fi
+          exit 0
 
       # -------------------------------------------------------------------
       # device 目标产物无法在 runner 上 boot，跳过冒烟（target != 'device'）。
