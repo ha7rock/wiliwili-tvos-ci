@@ -347,11 +347,12 @@ def build(out_dir, source_path):
          ("Back", layer_entries("back"))],
     )
 
-    # ---- App Icon - App Store 1280x768：单层压平（@1x）------------------
-    appstore = composite_flat(1280, 768, logo_sq).convert("RGBA")
+    # ---- App Icon - App Store 1280x768：双层（actool 要求 imagestack ≥2 层，
+    #      run#28 报 "must have at least 2 layers"）------------------------
     imagestack(
         os.path.join(brand, "App Icon - App Store.imagestack"),
-        [("Front", [("tv", "1x", appstore)])],
+        [("Front", [("tv", "1x", render_front(1280, 768, logo_sq))]),
+         ("Back",  [("tv", "1x", render_back(1280, 768))])],
     )
 
     # ---- Top Shelf Image Wide 2320x720pt：tv + tv-marketing，@1x/@2x ----
@@ -370,6 +371,23 @@ def build(out_dir, source_path):
         os.path.join(brand, "Top Shelf Image.imageset"),
         [("tv", "1x", ts_1x), ("tv", "2x", ts_2x)],
     )
+
+    # ---- brandassets 顶层 Contents.json（关键！缺它则 actool 视全部条目为
+    #      unassigned，不产 Assets.car —— run#28 实证。结构对照 bitrise
+    #      sample-tvos-app 的同名文件）--------------------------------------
+    wjson(os.path.join(brand, "Contents.json"), {
+        "assets": [
+            {"filename": "App Icon - App Store.imagestack", "idiom": "tv",
+             "role": "primary-app-icon", "size": "1280x768"},
+            {"filename": "App Icon.imagestack", "idiom": "tv",
+             "role": "primary-app-icon", "size": "400x240"},
+            {"filename": "Top Shelf Image Wide.imageset", "idiom": "tv",
+             "role": "top-shelf-image-wide", "size": "2320x720"},
+            {"filename": "Top Shelf Image.imageset", "idiom": "tv",
+             "role": "top-shelf-image", "size": "1920x720"},
+        ],
+        "info": INFO,
+    })
 
     return xcassets, placeholder
 
