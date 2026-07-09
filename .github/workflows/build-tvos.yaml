@@ -445,7 +445,7 @@ jobs:
             --platform "${ACPLAT}" \
             --minimum-deployment-target "${DEPLOYMENT_TARGET}" \
             --target-device tv \
-            --app-icon "App Icon" \
+            --app-icon "App Icon & Top Shelf Image" \
             --output-partial-info-plist "${PARTIAL}" \
             --errors --warnings --notices 2>&1 | tee -a "${LOG}"
           rc=${PIPESTATUS[0]}
