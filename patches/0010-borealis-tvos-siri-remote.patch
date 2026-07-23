@@ -1,8 +1,8 @@
 diff --git a/library/lib/platforms/sdl/sdl_input.cpp b/library/lib/platforms/sdl/sdl_input.cpp
-index 52b31e1..6e348c0 100644
+index 52b31e1..33967b4 100644
 --- a/library/lib/platforms/sdl/sdl_input.cpp
 +++ b/library/lib/platforms/sdl/sdl_input.cpp
-@@ -329,6 +329,212 @@ static const size_t SDL_AXIS_MAPPING[SDL_GAMEPAD_AXIS_MAX] = {
+@@ -329,6 +329,330 @@ static const size_t SDL_AXIS_MAPPING[SDL_GAMEPAD_AXIS_MAX] = {
  
  std::vector<std::pair<SDL_JoystickID, SDL_GameController*>> controllers;
  
@@ -37,6 +37,7 @@ index 52b31e1..6e348c0 100644
 +    int   lastX   = 0; // 上一帧水平离散方向 (-1 左 / +1 右)
 +    int   lastY   = 0; // 上一帧垂直离散方向 (-1 上 / +1 下)
 +    Uint8 lastHat = SDL_HAT_CENTERED;
++    bool  loggedRawAContact = false; // raw button idx0 触摸接触抑制诊断是否已打印 (一次性)
 +};
 +
 +// 我们自行 open 的 raw joystick (非 GameController 设备, 主要是 Siri Remote 形态 c)
@@ -45,6 +46,24 @@ index 52b31e1..6e348c0 100644
 +
 +bool tvLoggedFirstCtrlInput = false; // GameController 路径首个非零输入是否已打印
 +bool tvLoggedFirstRawInput  = false; // raw 路径首个非零输入是否已打印
++bool tvPrevSelect           = false; // 上一帧 BUTTON_A 状态 (SELECT 上升沿诊断用)
++
++// --- 点按位置分流 (本轮核心, 真机根因修正 2026-07-23) ---------------------------------
++// Siri Remote 触摸板是"一整块按钮": 不论点按在上/下/左/右/中心, SDL GameController 都报同一个
++// SDL_CONTROLLER_BUTTON_A (=确定); 方向信息只在 dpad 模拟轴里 (axis X/Y)。上一版仅抑制 raw
++// button 无效 —— 因确定来自 GameController buttonA (物理点按), 不是 raw touch。
++// 修正模型 (tvOS 原生风格): 物理点按 (buttonA 上升沿) 那一刻采样 dpad 轴位置决定语义:
++//   * |axisX| 或 |axisY| 超方向阈值 (点在边缘方向区) -> 发对应单次 NAV 并抑制 BUTTON_A;
++//   * 轴接近中心 (方向区外)                          -> 发 BUTTON_A (确定)。
++// 仅对 Siri Remote 生效 (设备名判定); 真实手柄永不进入 -> A 恒=确定、摇杆/dpad 恒=方向, 零改动。
++constexpr int TV_CLICK_DIR_THRESHOLD = 16383; // 方向判定阈值 (复用既有 NAV 阈值 16383; 真机可调)
++
++struct TvClickState
++{
++    bool prevA     = false; // 上一帧 buttonA(click) 状态, 用于 0->1 上升沿检测 (避免长按重复)
++    bool suppressA = false; // 本次点按已判为方向 -> 抑制 A 直到 buttonA 松开
++};
++std::unordered_map<SDL_GameController*, TvClickState> tvClickStates;
 +
 +// 带迟滞的边沿方向判定: 返回本帧离散方向 (-1 / 0 / +1)
 +int tvAxisDir(Sint16 v, int last)
@@ -137,7 +156,28 @@ index 52b31e1..6e348c0 100644
 +    }
 +}
 +
-+// raw joystick 兜底: 边沿触发方向 + 中心点按/Menu 兜底补映射 + 首个非零输入诊断
++// SELECT 来源诊断: 每当 BUTTON_A 上升沿, 打印其真实来源, 便于真机一轮确认"确定只认物理点按"。
++// 触摸误触发修复后, raw/axis 路径已不再产生 A, 正常情况下来源应恒为 gc-button-A (物理点按)。
++// 纯读取 (SDL_GameControllerGetButton 无副作用), 不消费键盘 sticky 状态, 不改任何输入行为。
++static void tvLogSelectSource(ControllerState* state)
++{
++    bool nowSel = state->buttons[BUTTON_A];
++    if (nowSel && !tvPrevSelect)
++    {
++        const char* src = "non-gc (keyboard/other; raw+axis 已抑制不产生 A)";
++        for (auto& c : controllers)
++            if (c.second && SDL_GameControllerGetButton(c.second, SDL_CONTROLLER_BUTTON_A))
++            {
++                src = "gc-button-A (物理点按/click)";
++                break;
++            }
++        brls::Logger::info("[tvOS][WP12] SELECT fired via {}", src);
++    }
++    tvPrevSelect = nowSel;
++}
++
++// raw joystick 兜底: 边沿触发方向 + Menu 兜底补映射 + 触摸抑制诊断 + 首个非零输入诊断
++// (确定 A 不再由本路径产生 —— 见函数内触摸误触发修复注释)
 +static void tvApplySiriRemoteFallback(ControllerState* state)
 +{
 +    if (tvRawJoysticks.empty()) return;
@@ -202,20 +242,98 @@ index 52b31e1..6e348c0 100644
 +        if (pressed & SDL_HAT_RIGHT) state->buttons[BUTTON_NAV_RIGHT] = true;
 +        st.lastHat = hat;
 +
-+        // --- 确定 / 返回 兜底补映射 (电平触发, 与既有语义一致) ---
-+        // microGamepad raw 按钮: idx0 = 中心点按(选择) -> BUTTON_A; 末位通常是 Menu
-+        // (pause_button_index = nbuttons-1) -> BUTTON_B。精确索引随 tvOS/OS 版本可能不同,
-+        // 需真机验证 (见 docs/WP12 真机清单); A/B 另有既有 controller/键盘路径兜底。
-+        if (nbtn > 0 && SDL_JoystickGetButton(js, 0))        state->buttons[BUTTON_A] = true;
++        // --- 返回 (Menu) 兜底补映射; 确定 (A) 触摸误触发修复 ---
++        // microGamepad raw 按钮布局 (SDL src/joystick/apple/SDL_mfijoystick.m):
++        //   idx0 = buttonA, idx1 = buttonX, 末位 = Menu (pause_button_index = nbuttons-1)。
++        //
++        // *** 触摸误触发修复 (真机报告 2026-07-23) ***
++        // 用户实测: 手指仅"触摸/滑动"触摸面 (未物理点按) 即误触发确定/select。根因: SDL 在
++        // 软件层无法可靠区分 Siri Remote 触摸面的 click (物理点按) 与 touch (接触) —— raw
++        // joystick 的 button idx0 在部分 tvOS/SDL 组合下会由触摸接触而非物理点按拉高。故采用
++        // 最保守策略: 本 raw 兜底路径 **完全不再产生 BUTTON_A**。确定只允许来自 GameController
++        // 的 SDL_CONTROLLER_BUTTON_A (= GCMicroGamepad.buttonA, 依 Apple GameController 文档
++        // 语义 = 触摸面"物理点按/click"; 见 updateControllerState 的 SDL_BUTTONS_MAPPING)。
++        // 这样即使触摸接触在 raw 层拉高某个 button, 也绝不会被当作确定。方向 (轴/hat 边沿触发)
++        // 完全不受影响, 仍照常导航。
++        //
++        // 诊断 (只读, 绝不产生 A): 记录 raw button idx0 首次被拉高, 便于真机一轮确认"仅触摸不
++        // 点按"是否会拉高该 button —— 若出现下行日志而屏幕无 SELECT/未进入, 即证明抑制生效。
++        if (nbtn > 0 && SDL_JoystickGetButton(js, 0) && !st.loggedRawAContact)
++        {
++            brls::Logger::info("[tvOS][WP12] raw button idx=0 active -> SUPPRESSED (NOT mapped to A; "
++                               "confirm 只认物理点按 gc-button-A) jid={}", jid);
++            st.loggedRawAContact = true;
++        }
++        // Menu = 遥控器上独立的物理按键 (非触摸面), 保持 0006 语义, 继续映射 BUTTON_B。
 +        if (nbtn > 1 && SDL_JoystickGetButton(js, nbtn - 1)) state->buttons[BUTTON_B] = true;
 +    }
 +}
++
++// 设备判定: 是否 Siri Remote (依设备名含 "Remote"/"Siri")。真实 MFi 手柄名不含这些关键字 ->
++// 返回 false -> 不进入点按分流, A/方向零改动。名称判定不可靠时保守只对确证的 Siri Remote 生效。
++static bool tvIsSiriRemote(SDL_GameController* gc)
++{
++    if (!gc) return false;
++    const char* name = SDL_GameControllerName(gc);
++    if (!name) return false;
++    return SDL_strcasestr(name, "Remote") != nullptr || SDL_strcasestr(name, "Siri") != nullptr;
++}
++
++// 点按位置分流 (GameController 路径, 形态 a/b —— 真机决定性反馈的路径)。
++// 在 updateControllerState 末尾调用: 此时 state->buttons[BUTTON_A] 已由 SDL_BUTTONS_MAPPING
++// 反映 buttonA(click)。仅 Siri Remote 生效。
++static void tvApplyClickSplit(ControllerState* state, SDL_GameController* c)
++{
++    if (!tvIsSiriRemote(c)) return; // 真实手柄零改动
++    TvClickState& st = tvClickStates[c];
++    bool rawA = SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_A) != 0;
++
++    if (rawA && !st.prevA) // buttonA 0->1 上升沿: 只在这一帧决策
++    {
++        // 取左右/上下各自较大分量, 兼容 SDL 把 dpad 轴映到 LEFT 或 RIGHT 轴对 (docs 未定死)。
++        int lx = SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_LEFTX);
++        int rx = SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_RIGHTX);
++        int ly = SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_LEFTY);
++        int ry = SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_RIGHTY);
++        int ax = (SDL_abs(lx) >= SDL_abs(rx)) ? lx : rx;
++        int ay = (SDL_abs(ly) >= SDL_abs(ry)) ? ly : ry;
++
++        const char* decided;
++        if (SDL_abs(ax) > TV_CLICK_DIR_THRESHOLD || SDL_abs(ay) > TV_CLICK_DIR_THRESHOLD)
++        {
++            // 边缘方向区: 取较大分量的轴向, 发单次 NAV, 抑制 A。Y 轴 上=负 (SDL/borealis 既有约定)。
++            if (SDL_abs(ax) >= SDL_abs(ay))
++            {
++                if (ax > 0) { state->buttons[BUTTON_NAV_RIGHT] = true; decided = "NAV_RIGHT"; }
++                else        { state->buttons[BUTTON_NAV_LEFT]  = true; decided = "NAV_LEFT";  }
++            }
++            else
++            {
++                if (ay > 0) { state->buttons[BUTTON_NAV_DOWN]  = true; decided = "NAV_DOWN"; }
++                else        { state->buttons[BUTTON_NAV_UP]    = true; decided = "NAV_UP";   }
++            }
++            st.suppressA = true;
++        }
++        else
++        {
++            // 中心区: 确定。保留 state->buttons[BUTTON_A] (由映射置真)。
++            st.suppressA = false;
++            decided = "SELECT";
++        }
++        brls::Logger::info("[tvOS][WP12] CLICK at axisX={} axisY={} -> DECIDED {}", ax, ay, decided);
++    }
++
++    if (!rawA) st.suppressA = false;              // 松开复位, 允许下次点按重新决策
++    if (st.suppressA) state->buttons[BUTTON_A] = false; // 方向点按全程抑制 A (含长按持续帧)
++    st.prevA = rawA;
++}
++
 +#endif // TVOS
 +
  static int mouseButtons[3] = { 0 };
  
  static inline int getMouseButtonState(int buttonIndex)
-@@ -395,6 +601,18 @@ static int sdlEventWatcher(void* data, SDL_Event* event)
+@@ -395,6 +719,18 @@ static int sdlEventWatcher(void* data, SDL_Event* event)
      {
          keyboardKeys[event->key.keysym.scancode] = event->type == SDL_KEYDOWN ? SDL_PRESSED : SDL_STICKY;
      }
@@ -234,7 +352,7 @@ index 52b31e1..6e348c0 100644
      Application::setActiveEvent(true);
      return 0;
  }
-@@ -422,6 +640,11 @@ SDLInputManager::SDLInputManager(SDL_Window* window)
+@@ -422,6 +758,11 @@ SDLInputManager::SDLInputManager(SDL_Window* window)
          SDL_JoystickID jid = SDL_JoystickGetDeviceInstanceID(i);
          Logger::info("sdl: joystick {}: \"{}\"", jid, SDL_JoystickNameForIndex(i));
          controllers.push_back({ jid, SDL_GameControllerOpen(i) });
@@ -246,7 +364,7 @@ index 52b31e1..6e348c0 100644
      }
  
      SDL_AddEventWatch(sdlEventWatcher, this->window);
-@@ -443,6 +666,12 @@ SDLInputManager::~SDLInputManager()
+@@ -443,6 +784,13 @@ SDLInputManager::~SDLInputManager()
      {
          SDL_GameControllerClose(i.second);
      }
@@ -255,11 +373,12 @@ index 52b31e1..6e348c0 100644
 +        if (p.second) SDL_JoystickClose(p.second);
 +    tvRawJoysticks.clear();
 +    tvRemoteAxisStates.clear();
++    tvClickStates.clear();
 +#endif
  }
  
  short SDLInputManager::getControllersConnectedCount()
-@@ -505,6 +734,13 @@ void SDLInputManager::updateUnifiedControllerState(ControllerState* state)
+@@ -505,6 +853,14 @@ void SDLInputManager::updateUnifiedControllerState(ControllerState* state)
      state->buttons[BUTTON_NAV_RIGHT] |= state->buttons[BUTTON_RIGHT];
      state->buttons[BUTTON_NAV_DOWN] |= state->buttons[BUTTON_DOWN];
      state->buttons[BUTTON_NAV_LEFT] |= state->buttons[BUTTON_LEFT];
@@ -269,7 +388,20 @@ index 52b31e1..6e348c0 100644
 +    // GameController 路径, 不受影响 (SDL_IsGameController==true 的设备永不进入兜底)。
 +    tvMaybeLogFirstControllerInput();
 +    tvApplySiriRemoteFallback(state);
++    tvLogSelectSource(state);
 +#endif
  }
  
  void SDLInputManager::updateControllerState(ControllerState* state, int controller)
+@@ -532,6 +888,11 @@ void SDLInputManager::updateControllerState(ControllerState* state, int controll
+     {
+         state->axes[SDL_AXIS_MAPPING[i]] = SDL_GameControllerGetAxis(c, (SDL_GameControllerAxis)i) / 32767.0;
+     }
++
++#if defined(TVOS)
++    // WP12: Siri Remote 点按位置分流 (核心)。手柄 tvIsSiriRemote()==false -> 直接返回, 零改动。
++    tvApplyClickSplit(state, c);
++#endif
+ }
+ 
+ bool SDLInputManager::getKeyboardKeyState(BrlsKeyboardScancode key)
