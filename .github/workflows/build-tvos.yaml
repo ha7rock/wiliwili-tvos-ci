@@ -192,6 +192,27 @@ jobs:
             echo "0006 applied" | tee -a "${LOG_DIR}/03d-patch-resilience.log"
           fi
 
+      - name: Apply tvOS Siri Remote patch (WP12 / 0010 borealis)
+        run: |
+          set -euo pipefail
+          # 0010 叠加在 0004/0006 之上，作用于 borealis 子模块 (sdl_input.cpp)。
+          #   WP12: Siri Remote 最小方向导航 (上下左右 + 确定 + 返回)。已查证 SDL2
+          #   src/joystick/apple/SDL_mfijoystick.m —— Siri Remote 触摸板方向在 SDL 里呈现为
+          #   模拟轴 (Direction Pad X/Y Axis)，且可能未被建成可用 GameController (SDL_IsGameController
+          #   ==false = 方向失效根因)。补丁在既有 GameController 路径之外新增 raw SDL_Joystick 兜底:
+          #   边沿触发的离散 NAV 脉冲 (越阈值触发一次、带迟滞回中前不重复，避免焦点连跳) + hat 兜底
+          #   + 中心点按->A / Menu->B 补映射 + 设备枚举/首个非零输入诊断日志。全程 TVOS 宏隔离,
+          #   手柄走既有 GameController 路径零改动 (SDL_IsGameController==true 永不进入兜底)。
+          P10="${GITHUB_WORKSPACE}/patches/0010-borealis-tvos-siri-remote.patch"
+          test -f "${P10}" || { echo "patch not found: ${P10}"; exit 1; }
+          if git -C "${SRC_DIR}/library/borealis" apply --reverse --check "${P10}" >/dev/null 2>&1; then
+            echo "0010 already applied" | tee "${LOG_DIR}/03f-patch-siri-remote.log"
+          else
+            git -C "${SRC_DIR}/library/borealis" apply --check "${P10}" 2>&1 | tee "${LOG_DIR}/03f-patch-siri-remote.log"
+            git -C "${SRC_DIR}/library/borealis" apply "${P10}"
+            echo "0010 applied" | tee -a "${LOG_DIR}/03f-patch-siri-remote.log"
+          fi
+
       - name: Apply tvOS quitApp cleanup patch (WP10 / 0009 wiliwili)
         run: |
           set -euo pipefail
